@@ -1,0 +1,36 @@
+# General
+build/
+.dart_tool/
+.idea/
+*.iml
+*.packages
+
+# Android
+android/local.properties
+android/key.properties
+android/.gradle/
+android/app/build/
+
+# iOS
+ios/Pods/
+ios/Podfile.lock
+ios/.symlinks/
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
+ios/Runner.xcworkspace/
+
+# macOS
+macos/Pods/
+macos/Podfile.lock
+macos/.symlinks/
+macos/Runner.xcworkspace/
+
+# Linux
+linux/build/
+linux/.config
+
+# Windows
+windows/build/
+windows/runner/Debug/
+windows/runner/Release/
+windows/runner/Profile/
