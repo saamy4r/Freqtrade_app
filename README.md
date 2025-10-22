@@ -10,10 +10,11 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 * Switch between bots
 
 ## Screenshots
-![Image](https://github.com/user-attachments/assets/2cd9e73d-1de6-4bcd-9cc7-fb624c0ee230)
-![Image](https://github.com/user-attachments/assets/43af3cd2-7cbc-407b-a135-94acbea6fd24)
-![Image](https://github.com/user-attachments/assets/4d84b3e8-356e-4476-9da3-e01d6f923f12)
-![Image](https://github.com/user-attachments/assets/36584696-6d7b-47fd-83cb-cd2e74307a97)
+![photo_2025-10-22_19-21-49](https://github.com/user-attachments/assets/c6474f32-cec1-485a-8ee5-09f1b3c53c6b)
+![photo_2025-10-22_19-22-04](https://github.com/user-attachments/assets/6128f770-56b8-463f-89da-3e89846261b7)
+![photo_2025-10-22_19-22-09](https://github.com/user-attachments/assets/77d4526b-ae63-43ac-8d03-95050ae226eb)
+![photo_2025-10-22_19-22-17](https://github.com/user-attachments/assets/cac31318-b4fd-45f2-a36d-54c127e0a692)
+
 
 ## Getting Started
 
