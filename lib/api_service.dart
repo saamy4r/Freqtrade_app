@@ -97,4 +97,7 @@ class ApiService {
   Future<Map<String, dynamic>> getProfitSummary() async {
     return await _authenticatedGet('/profit');
   }
+  Future<Map<String, dynamic>> getBalance() async {
+    return await _authenticatedGet('/balance');
+  }
 }

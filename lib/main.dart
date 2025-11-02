@@ -522,6 +522,9 @@ class OpenTradesScreen extends StatefulWidget {
 
 class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepAliveClientMixin {
   List<dynamic>? _trades;
+  Map<String, dynamic>? _balance;
+  double? _freeBalance;
+  double? _stakedAmount;
   String? _error;
 
   @override
@@ -544,19 +547,53 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
   Future<void> _fetchData() async {
     setState(() {
       _trades = null;
+      _balance = null;
+      _freeBalance = null;
+      _stakedAmount = null;
       _error = null;
     });
 
     try {
-      final result = await widget.apiService.getOpenTrades();
-      if (!mounted) return;
-      result.sort((a, b) {
-        final dateA = a['open_date'] ?? '';
-        final dateB = b['open_date'] ?? '';
-        return dateB.compareTo(dateA); // Compare B to A for descending
-      });
-      setState(() {
-        _trades = result;
+      final results = await Future.wait([
+        widget.apiService.getOpenTrades(),
+          widget.apiService.getBalance(),
+        ]);
+        if (!mounted) return;
+        final tradesResult = results[0] as List<dynamic>;    // This is 'result[0]'
+        final balanceResult = results[1] as Map<String, dynamic>; // This is 'result[1]'
+        double freeBalance = 0.0;
+        double stakedAmount = 0.0;
+        try {
+          if (balanceResult['currencies'] is List) {
+            final currencies = balanceResult['currencies'] as List<dynamic>;
+            
+            // Find the stake currency data (the one that is not a position)
+            final stakeCurrencyData = currencies.firstWhere(
+              (c) => c['is_position'] == false,
+              orElse: () => null,
+            );
+
+            if (stakeCurrencyData != null) {
+              freeBalance = stakeCurrencyData['free']?.toDouble() ?? 0.0;
+              stakedAmount = stakeCurrencyData['used']?.toDouble() ?? 0.0;
+            }
+          }
+      } catch (e) {
+        print('Error parsing free balance in OpenTrades: $e');
+      }
+        // --- ADD THESE TWO LINES ---
+        print('--- DEBUG: /balance RESPONSE ---');
+        print(balanceResult);
+        tradesResult.sort((a, b) {
+          final dateA = a['open_date'] ?? '';
+          final dateB = b['open_date'] ?? '';
+          return dateB.compareTo(dateA); // Compare B to A for descending
+        });
+        setState(() {
+          _trades = tradesResult;
+          _balance = balanceResult;
+          _freeBalance = freeBalance;
+          _stakedAmount = stakedAmount;
       });
     } catch (e) {
       if (!mounted) return;
@@ -584,7 +621,7 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
     if (_error != null) {
       return Center(child: Text('Error: $_error\nPull down to refresh.'));
     }
-    if (_trades == null) {
+    if (_trades == null || _balance == null || _freeBalance == null || _stakedAmount == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -592,10 +629,62 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
       0.0,
           (sum, trade) => sum + (trade['profit_abs'] ?? 0.0),
     );
-    final currency = _trades!.isNotEmpty ? _trades!.first['stake_currency'] ?? '' : '';
+    // GET CURRENCY AND BALANCE FROM THE NEW _balance STATE
+    final currency = _balance!['stake_currency'] ?? '';
+    
+    // This is the cash balance (e.g., 1686.13)
+    final cashBalance = _balance!['total']?.toDouble() ?? 0.0;
+    
+    // This is the true free balance we just found (e.g., 16.86)
+    final double freeBalance = _freeBalance!; 
+    final double stakedAmount = _stakedAmount!;
+    // This is the correct final portfolio value (e.g., 1410.95)
+    final totalPortfolioValue = cashBalance + totalOpenProfit;
 
     return Column(
       children: [
+        Card(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          elevation: 2,
+          child: ListTile(
+            leading: Icon(
+              Icons.account_balance_wallet_outlined,
+              color: Theme.of(context).primaryColor,
+            ),
+            title: const Text('Total Portfolio Value', style: TextStyle(fontWeight: FontWeight.bold)),
+            trailing: Text(
+              '${totalPortfolioValue.toStringAsFixed(2)} USDT',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+          ),
+        ),
+        Card(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+          ),
+          child: ListTile(
+            leading: Icon(
+              Icons.attach_money,
+              color: Colors.green,
+            ),
+            title: const Text('Free / Staked', style: TextStyle(fontWeight: FontWeight.bold)), // <-- CHANGED
+            trailing: Text(
+              '${freeBalance.toStringAsFixed(2)} / ${stakedAmount.toStringAsFixed(2)} $currency', // <-- CHANGED
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+          ),
+        ),
         Card(
           margin: const EdgeInsets.all(12.0),
           elevation: 2,
@@ -626,7 +715,8 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
               itemBuilder: (context, index) {
                 final trade = _trades![index];
                 final profitRatio = trade['profit_ratio'] ?? 0.0;
-                final tradeDirection = trade['trade_direction'];
+                final bool isShort = trade['is_short'] ?? false;
+                final String tradeDirection = isShort ? 'short' : 'long';
                 final stakeAmount = trade['stake_amount'] ?? 0.0;
                 final openRate = trade['open_rate'] ?? 0.0;
                 final currentRate = trade['current_rate'] ?? 0.0;
@@ -669,7 +759,6 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
                             const SizedBox(width: 8),
-                            if (tradeDirection != null)
                               Chip(
                                 label: Text(
                                   tradeDirection.toString().toUpperCase(),
@@ -744,9 +833,11 @@ class ClosedTradesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
       key: ValueKey(apiService.baseUrl),
+      // STEP 1: Update the Future.wait to include getBalance()
       future: Future.wait([
         apiService.getProfitSummary(),
         apiService.getClosedTrades(),
+        apiService.getBalance(), // <-- This fetches the balance
       ]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -759,15 +850,22 @@ class ClosedTradesScreen extends StatelessWidget {
           return const Center(child: Text('Could not load trade data.'));
         }
 
+        // STEP 2: Unpack all the data from the Future
         final profitSummary = snapshot.data![0] as Map<String, dynamic>;
         final trades = snapshot.data![1] as List<dynamic>;
+        final balanceData = snapshot.data![2] as Map<String, dynamic>; // <-- This gets the balance data
+
         trades.sort((a, b) {
           final dateA = a['close_date'] ?? '';
           final dateB = b['close_date'] ?? '';
           return dateB.compareTo(dateA); // Compare B to A for descending order
         });
+        
         final totalProfit = profitSummary['profit_closed_coin']?.toDouble() ?? 0.0;
         final currency = profitSummary['stake_currency'] ?? '';
+        
+        // STEP 3: Use the correct key 'total' (this is the line you asked about)
+        final totalPortfolioValue = balanceData['total']?.toDouble() ?? 0.0;
 
         if (trades.isEmpty) {
           return const Center(child: Text('No closed trades found.'));
@@ -775,6 +873,28 @@ class ClosedTradesScreen extends StatelessWidget {
 
         return Column(
           children: [
+            // STEP 4: Add the new Card for portfolio value
+            Card(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              elevation: 2,
+              child: ListTile(
+                leading: Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Theme.of(context).primaryColor,
+                ),
+                title: const Text('Current Portfolio Value', style: TextStyle(fontWeight: FontWeight.bold)),
+                trailing: Text(
+                  '${totalPortfolioValue.toStringAsFixed(2)} USDT',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+              ),
+            ),
+            
+            // This is your existing card for "Total Closed Profit"
             Card(
               margin: const EdgeInsets.all(12.0),
               elevation: 2,
@@ -800,13 +920,16 @@ class ClosedTradesScreen extends StatelessWidget {
                 itemCount: trades.length,
                 itemBuilder: (context, index) {
                   final trade = trades[index];
+                  // ... all the rest of your ListView.builder code ...
+                  // ... (no changes needed inside here) ...
                   final profitRatio = trade['profit_ratio'] ?? 0.0;
                   final stakeAmount = trade['stake_amount'] ?? 0.0;
                   final openRate = trade['open_rate'] ?? 0.0;
                   final closeRate = trade['close_rate'] ?? 0.0;
                   final openDate = trade['open_date'] ?? 'N/A';
                   final closeDate = trade['close_date'] ?? 'N/A';
-                  final tradeDirection = trade['trade_direction'];
+                  final bool isShort = trade['is_short'] ?? false;
+                  final String tradeDirection = isShort ? 'short' : 'long';
 
                   Color cardColor;
                   IconData trendIcon;
@@ -844,7 +967,6 @@ class ClosedTradesScreen extends StatelessWidget {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               const SizedBox(width: 8),
-                              if (tradeDirection != null)
                                 Chip(
                                   label: Text(
                                     tradeDirection.toString().toUpperCase(),
@@ -996,6 +1118,7 @@ class DashboardScreen extends StatelessWidget {
         apiService.getProfitSummary(),
         apiService.getClosedTrades(limit: 500),
         apiService.showConfig(),
+        apiService.getBalance(),
       ]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1011,15 +1134,45 @@ class DashboardScreen extends StatelessWidget {
         final profitSummary = snapshot.data![0] as Map<String, dynamic>;
         final trades = snapshot.data![1] as List<dynamic>;
         final config = snapshot.data![2] as Map<String, dynamic>;
+        final balanceData = snapshot.data![3] as Map<String, dynamic>;
 
         // Data from profitSummary
         final overallProfitPercent = profitSummary['profit_closed_percent']?.toDouble() ?? 0.0;
-        final stakeCurrency = profitSummary['stake_currency'] ?? '';
+        // stakeCurrency will be defined below from the /balance endpoint
         final tradeCount = profitSummary['closed_trade_count'] ?? 0;
         final avgProfit = profitSummary['profit_closed_percent_mean']?.toDouble() ?? 0.0;
         final avgDuration = profitSummary['avg_duration'] ?? 'N/A';
         final bestPair = profitSummary['best_pair'] ?? 'N/A';
         final tradingVolume = profitSummary['trading_volume']?.toDouble() ?? 0.0;
+
+
+        // --- NEW LOGIC FOR STAKE CURRENCY AND FREE BALANCE ---
+        String stakeCurrency = profitSummary['stake_currency'] ?? ''; // Get from /profit first
+        double freeBalance = 0.0;
+
+        try {
+          if (balanceData['currencies'] is List) {
+            final currencies = balanceData['currencies'] as List<dynamic>;
+            
+            // Find the stake currency data (the one that is not a position)
+            final stakeCurrencyData = currencies.firstWhere(
+              (c) => c['is_position'] == false,
+              orElse: () => null,
+            );
+
+            if (stakeCurrencyData != null) {
+              freeBalance = stakeCurrencyData['free']?.toDouble() ?? 0.0;
+              // If stakeCurrency was empty from /profit, get it from /balance
+              if (stakeCurrency.isEmpty) {
+                stakeCurrency = stakeCurrencyData['currency'] ?? '';
+              }
+            }
+          }
+        } catch (e) {
+          print('Error parsing free balance from /balance: $e');
+        }
+        // --- END OF NEW LOGIC ---
+
 
         // Data from config
         final strategy = config['strategy'] ?? 'N/A';
@@ -1052,6 +1205,25 @@ class DashboardScreen extends StatelessWidget {
           }
         } else {
           bottomTitleInterval = const Duration(days: 1).inMilliseconds.toDouble();
+        }
+        try {
+          // Check if 'currencies' key exists and is a List
+          if (balanceData['currencies'] is List) {
+            final currencies = balanceData['currencies'] as List<dynamic>;
+            
+            // Find the data for our stake_currency (e.g., 'USDT')
+            final stakeCurrencyData = currencies.firstWhere(
+              (c) => c['currency'] == stakeCurrency,
+              orElse: () => null, // Return null if not found
+            );
+
+            if (stakeCurrencyData != null) {
+              // Get the 'free' value from that currency's data
+              freeBalance = stakeCurrencyData['free']?.toDouble() ?? 0.0;
+            }
+          }
+        } catch (e) {
+          print('Error parsing free balance: $e'); // For debugging
         }
 
         return AnimatedContainer(
@@ -1160,6 +1332,7 @@ class DashboardScreen extends StatelessWidget {
                           SizedBox(width: tileWidth, child: StatTile(icon: Icons.access_time, title: 'Avg Duration', value: avgDuration)),
                           SizedBox(width: tileWidth, child: StatTile(icon: Icons.star_border, title: 'Best Pair', value: bestPair)),
                           SizedBox(width: tileWidth, child: StatTile(icon: Icons.bar_chart, title: 'Trading Volume', value: '${tradingVolume.toStringAsFixed(0)} $stakeCurrency')),
+                          SizedBox(width: tileWidth, child: StatTile(icon: Icons.account_balance_wallet_outlined, title: 'Free Balance', value: '${freeBalance.toStringAsFixed(2)} $stakeCurrency')),
                           SizedBox(width: tileWidth, child: StatTile(icon: Icons.memory, title: 'Strategy', value: strategy)),
                         ],
                       );
