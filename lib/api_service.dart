@@ -39,7 +39,7 @@ class ApiService {
       headers: {
         'Authorization': 'Basic ${base64Encode(utf8.encode('$username:$password'))}',
       },
-    );
+    ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -56,7 +56,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl$endpoint'),
       headers: {'Authorization': 'Bearer $accessToken'},
-    );
+    ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -71,7 +71,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl/status'),
       headers: {'Authorization': 'Bearer $accessToken'},
-    );
+    ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);

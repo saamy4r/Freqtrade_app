@@ -1,9 +1,10 @@
-
+import 'dart:async'; 
+import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'bot_model.dart';
 import 'bot_storage.dart';
@@ -91,6 +92,7 @@ class _AppShellState extends State<AppShell> {
   bool? _isDryRun;
   int _selectedIndex = 0;
   bool _isConnecting = false;
+  static const _activeBotKey = 'active_bot_id';
 
   @override
   void initState() {
@@ -106,7 +108,23 @@ class _AppShellState extends State<AppShell> {
         _bots = bots;
       });
       if (_bots.isNotEmpty) {
-        await _selectBot(_bots.first);
+        final prefs = await SharedPreferences.getInstance();
+        final savedBotId = prefs.getString(_activeBotKey);
+        
+        Bot? botToLoad;
+        if (savedBotId != null) {
+          try {
+            // Try to find the bot with the saved ID
+            botToLoad = _bots.firstWhere((b) => b.id == savedBotId);
+          } catch (e) {
+            // If not found (e.g., bot was deleted), botToLoad will remain null
+            botToLoad = null;
+          }
+        }
+        
+        // If we found the bot, load it. Otherwise, load the first bot.
+        await _selectBot(botToLoad ?? _bots.first);
+
       } else {
         setState(() => _isConnecting = false);
       }
@@ -148,7 +166,16 @@ class _AppShellState extends State<AppShell> {
       }
     }
   }
-
+  Future<void> _userSelectBot(Bot bot) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_activeBotKey, bot.id);
+    } catch (e) {
+      print("Failed to save active bot ID: $e");
+    }
+    // Now, call the main selection logic
+    await _selectBot(bot);
+  }
   Future<void> _addBot() async {
     final newBot = await Navigator.push<Bot>(
       context,
@@ -159,15 +186,23 @@ class _AppShellState extends State<AppShell> {
       final allBots = await BotStorage.getBots();
       if(mounted) {
         setState(() { _bots = allBots; });
-        await _selectBot(newBot);
+        await _userSelectBot(newBot);
       }
     }
   }
 
   Future<void> _deleteBot(String botId) async {
     final wasActiveBot = _activeBot?.id == botId;
+    
+    // If we are deleting the active bot, clear the saved preference
+    if (wasActiveBot) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_activeBotKey);
+    }
+
     await BotStorage.deleteBot(botId);
     final allBots = await BotStorage.getBots();
+    
     if(mounted) {
       setState(() { _bots = allBots; });
       if (_bots.isEmpty) {
@@ -176,8 +211,10 @@ class _AppShellState extends State<AppShell> {
           _apiService = null;
         });
       } else if (wasActiveBot) {
-        await _selectBot(_bots.first);
+        // If the active bot was deleted, load the first one in the list
+        await _userSelectBot(_bots.first);
       }
+      // If a non-active bot was deleted, we don't need to do anything else
     }
   }
 
@@ -201,7 +238,7 @@ class _AppShellState extends State<AppShell> {
         bots: _bots,
         activeBot: _activeBot,
         onAddBot: _addBot,
-        onSelectBot: _selectBot,
+        onSelectBot: _userSelectBot,
         onDeleteBot: _deleteBot,
       ),
     ];
@@ -415,16 +452,20 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String? _errorMessage;
 
   Future<void> _testAndSave() async {
     if (_botNameController.text.isEmpty || _urlController.text.isEmpty || _usernameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All fields are required.')),
-      );
+      setState(() {
+        _errorMessage = 'All fields are required.'; // <-- USE THE VARIABLE
+      });
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null; // <-- Clear previous errors
+    });
 
     try {
       String userInputUrl = _urlController.text.trim();
@@ -453,11 +494,29 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pop(context, newBot);
       }
 
-    } catch (e) {
+    } on TimeoutException { // <-- CATCH SPECIFIC ERRORS
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        setState(() {
+          _errorMessage = 'Connection timed out. Check the URL or port.';
+        });
+      }
+    } on SocketException { // <-- CATCH SPECIFIC ERRORS
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Connection failed. Check the URL or port.';
+        });
+      }
+    } on Exception catch (e) { // <-- CATCH ALL OTHER ERRORS
+      if (mounted) {
+        setState(() {
+          // Check for the 'Login failed' text from our api_service
+          if (e.toString().contains('Login failed')) {
+            _errorMessage = 'Login failed. Check username or password.';
+          } else {
+            // Show a generic error for other issues
+            _errorMessage = 'An unknown error occurred.';
+          }
+        });
       }
     } finally {
       if(mounted) {
@@ -500,6 +559,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: const InputDecoration(labelText: 'Password'),
               ),
               const SizedBox(height: 20),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               _isLoading
                   ? const CircularProgressIndicator()
                   : ElevatedButton(onPressed: _testAndSave, child: const Text('Login')),
@@ -836,7 +907,7 @@ class ClosedTradesScreen extends StatelessWidget {
       // STEP 1: Update the Future.wait to include getBalance()
       future: Future.wait([
         apiService.getProfitSummary(),
-        apiService.getClosedTrades(),
+        apiService.getClosedTrades(limit: 500),
         apiService.getBalance(), // <-- This fetches the balance
       ]),
       builder: (context, snapshot) {
