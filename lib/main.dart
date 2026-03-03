@@ -674,6 +674,35 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
     }
   }
 
+  Future<void> _showExitDialog(Map<String, dynamic> trade) async {
+    final tradeId = trade['trade_id']?.toString() ?? '';
+    final pair = trade['pair'] ?? 'Unknown';
+    final currentRate = (trade['current_rate'] ?? 0.0).toDouble();
+    final profitRatio = (trade['profit_ratio'] ?? 0.0).toDouble();
+    final profitAbs = (trade['profit_abs'] ?? 0.0).toDouble();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => _ExitTradeDialog(
+        pair: pair,
+        tradeId: tradeId,
+        currentRate: currentRate,
+        profitRatio: profitRatio,
+        profitAbs: profitAbs,
+        apiService: widget.apiService,
+        onSuccess: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Exit order placed for $pair'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _fetchData();
+        },
+      ),
+    );
+  }
+
   Widget _buildInfoColumn(String title, String value, {CrossAxisAlignment? alignment}) {
     return Column(
       crossAxisAlignment: alignment ?? CrossAxisAlignment.start,
@@ -865,9 +894,19 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
                         ),
                         const SizedBox(height: 8),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Opened: $openDate', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            TextButton.icon(
+                              onPressed: () => _showExitDialog(trade),
+                              icon: const Icon(Icons.exit_to_app, size: 16),
+                              label: const Text('Exit', style: TextStyle(fontSize: 12)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.orange,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
                           ],
                         )
                       ],
@@ -883,6 +922,198 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
   }
 }
 
+
+// Dialog for exiting an open trade.
+class _ExitTradeDialog extends StatefulWidget {
+  final String pair;
+  final String tradeId;
+  final double currentRate;
+  final double profitRatio;
+  final double profitAbs;
+  final ApiService apiService;
+  final VoidCallback onSuccess;
+
+  const _ExitTradeDialog({
+    required this.pair,
+    required this.tradeId,
+    required this.currentRate,
+    required this.profitRatio,
+    required this.profitAbs,
+    required this.apiService,
+    required this.onSuccess,
+  });
+
+  @override
+  State<_ExitTradeDialog> createState() => _ExitTradeDialogState();
+}
+
+class _ExitTradeDialogState extends State<_ExitTradeDialog> {
+  bool _isLoading = false;
+  String? _error;
+
+  Future<void> _submitExit(String orderType) async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      await widget.apiService.forceExit(widget.tradeId, orderType);
+      if (mounted) {
+        Navigator.of(context).pop();
+        widget.onSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1B3A2D) : Colors.green.shade50;
+    final profitColor = widget.profitRatio >= 0 ? Colors.green.shade700 : Colors.red.shade600;
+    final profitSign = widget.profitRatio >= 0 ? '+' : '';
+
+    return AlertDialog(
+      backgroundColor: bgColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Colors.black, width: 1.5),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.exit_to_app, color: Colors.green, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Force Exit',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              Text(
+                widget.pair,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.green.shade700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 20),
+          // Current price row
+          Row(
+            children: [
+              const Icon(Icons.speed, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
+              const Text('Current Price', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              const Spacer(),
+              Text(
+                widget.currentRate.toStringAsFixed(6),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Profit row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: profitColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: profitColor.withOpacity(0.35)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      widget.profitRatio >= 0 ? Icons.trending_up : Icons.trending_down,
+                      size: 16,
+                      color: profitColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Text('Current P/L', style: TextStyle(color: profitColor, fontSize: 13, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$profitSign${(widget.profitRatio * 100).toStringAsFixed(2)}%',
+                      style: TextStyle(color: profitColor, fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    Text(
+                      '$profitSign${widget.profitAbs.toStringAsFixed(2)} USDT',
+                      style: TextStyle(color: profitColor, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Info note
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline, size: 14, color: Colors.grey),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'A limit order will be placed at the current bid price.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13),
+            ),
+          ],
+        ],
+      ),
+      actions: _isLoading
+          ? [const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())]
+          : [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _submitExit('limit'),
+                icon: const Icon(Icons.price_check, size: 18),
+                label: const Text('Limit Exit'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+              ),
+            ],
+    );
+  }
+}
 
 // ClosedTradesScreen: Shows detailed info for closed trades.
 class ClosedTradesScreen extends StatelessWidget {

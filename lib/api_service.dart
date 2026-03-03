@@ -97,7 +97,34 @@ class ApiService {
   Future<Map<String, dynamic>> getProfitSummary() async {
     return await _authenticatedGet('/profit');
   }
+
   Future<Map<String, dynamic>> getBalance() async {
     return await _authenticatedGet('/balance');
+  }
+
+  Future<Map<String, dynamic>> _authenticatedPost(String endpoint, Map<String, dynamic> body) async {
+    if (accessToken == null) throw Exception('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Request failed: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> forceExit(String tradeId, String orderType) async {
+    return await _authenticatedPost('/forceexit', {
+      'tradeid': tradeId,
+      'ordertype': orderType,
+    });
   }
 }
