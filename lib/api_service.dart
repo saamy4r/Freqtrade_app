@@ -127,4 +127,12 @@ class ApiService {
       'ordertype': orderType,
     });
   }
+
+  Future<List<dynamic>> getLogs({int limit = 500}) async {
+    final data = await _authenticatedGet('/logs?limit=$limit');
+    if (data['logs'] is List) {
+      return data['logs'];
+    }
+    return [];
+  }
 }
