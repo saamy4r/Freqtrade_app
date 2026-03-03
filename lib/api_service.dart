@@ -135,4 +135,16 @@ class ApiService {
     }
     return [];
   }
+
+  Future<List<String>> getWhitelist() async {
+    final data = await _authenticatedGet('/whitelist');
+    final list = data['whitelist'];
+    if (list is List) return list.map((e) => e.toString()).toList();
+    return [];
+  }
+
+  Future<Map<String, dynamic>> getPairCandles(String pair, String timeframe, {int limit = 300}) async {
+    final encoded = Uri.encodeComponent(pair);
+    return await _authenticatedGet('/pair_candles?pair=$encoded&timeframe=$timeframe&limit=$limit');
+  }
 }
