@@ -3,6 +3,7 @@ build/
 .dart_tool/
 .idea/
 *.iml
+*.md
 *.packages
 
 # Android
