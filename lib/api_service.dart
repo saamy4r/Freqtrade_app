@@ -97,7 +97,16 @@ class ApiService {
   Future<Map<String, dynamic>> getProfitSummary() async {
     return await _authenticatedGet('/profit');
   }
+
   Future<Map<String, dynamic>> getBalance() async {
     return await _authenticatedGet('/balance');
+  }
+
+  Future<List<dynamic>> getLogs({int limit = 500}) async {
+    final data = await _authenticatedGet('/logs?limit=$limit');
+    if (data['logs'] is List) {
+      return data['logs'];
+    }
+    return [];
   }
 }
