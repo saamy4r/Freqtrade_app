@@ -8,6 +8,9 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 * Check portfolio statistics
 * Monitor bot profit/loss
 * Switch between bots
+* Cumulative profit chart with trade markers and TradingView-style pan/zoom
+* Terminal-style logs screen with color-coded log levels (INFO, WARNING, ERROR, DEBUG)
+* Force exit trades via limit order with P/L preview dialog
 
 ## Screenshots
 ![photo_2025-10-22_19-21-49](https://github.com/user-attachments/assets/c6474f32-cec1-485a-8ee5-09f1b3c53c6b)
