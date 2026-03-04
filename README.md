@@ -13,10 +13,8 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 * Force exit trades via limit order with P/L preview dialog
 
 ## Screenshots
-![photo_2025-10-22_19-21-49](https://github.com/user-attachments/assets/c6474f32-cec1-485a-8ee5-09f1b3c53c6b)
 ![photo_2025-10-22_19-22-04](https://github.com/user-attachments/assets/6128f770-56b8-463f-89da-3e89846261b7)
 ![photo_2025-10-22_19-22-09](https://github.com/user-attachments/assets/77d4526b-ae63-43ac-8d03-95050ae226eb)
-![photo_2025-10-22_19-22-17](https://github.com/user-attachments/assets/cac31318-b4fd-45f2-a36d-54c127e0a692)
 
 
 ## Getting Started
