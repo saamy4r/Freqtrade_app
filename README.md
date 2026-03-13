@@ -17,16 +17,41 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 ![photo_2025-10-22_19-22-09](https://github.com/user-attachments/assets/77d4526b-ae63-43ac-8d03-95050ae226eb)
 
 
-## Getting Started
+## Download
 
-This project is a Flutter application.
+| Platform | Download |
+|----------|----------|
+| Android | [![Download APK](https://img.shields.io/badge/Download-APK-brightgreen?style=for-the-badge&logo=android)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.0.0/freqtrade-visualizer-v1.0.0.apk) |
+| Linux x64 | [![Download Linux](https://img.shields.io/badge/Download-Linux_x64-blue?style=for-the-badge&logo=linux)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.0.0/freqtrade-visualizer-v1.0.0-linux-x64.tar.gz) |
+
+> All releases: [github.com/saamy4r/Freqtrade_app/releases](https://github.com/saamy4r/Freqtrade_app/releases)
+
+### Android Installation
+
+1. Download the APK using the button above.
+2. On your Android device, enable **Install from unknown sources** (Settings → Security).
+3. Open the downloaded APK and tap **Install**.
+
+### Linux Installation
+
+1. Download the tarball using the button above.
+2. Extract it:
+    ```bash
+    tar -xzf freqtrade-visualizer-v1.0.0-linux-x64.tar.gz
+    ```
+3. Run the app:
+    ```bash
+    ./bundle/freqtrade_app
+    ```
+
+## Build from Source
 
 ### Prerequisites
 
 * Flutter SDK: [Install Flutter](https://flutter.dev/docs/get-started/install)
 * A running Freqtrade instance with the API enabled.
 
-### Installation & Running
+### Steps
 
 1.  **Clone the repository:**
     ```bash
