@@ -1,6 +1,5 @@
-
 class Bot {
-  final String id; // Unique ID for each bot
+  final String id;
   final String name;
   final String url;
   final String username;
@@ -14,7 +13,6 @@ class Bot {
     required this.password,
   });
 
-  // Method to convert a Bot instance to a Map
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -25,7 +23,6 @@ class Bot {
     };
   }
 
-  // Factory constructor to create a Bot instance from a Map
   factory Bot.fromJson(Map<String, dynamic> json) {
     return Bot(
       id: json['id'],
