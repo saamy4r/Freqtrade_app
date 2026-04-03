@@ -6,6 +6,7 @@ build/
 *.md
 *.packages
 
+.claude
 # Android
 android/local.properties
 android/key.properties
