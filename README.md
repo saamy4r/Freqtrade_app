@@ -4,13 +4,14 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 
 ## Features
 
-* View open/closed trades
-* Check portfolio statistics
-* Monitor bot profit/loss
-* Switch between bots
-* Cumulative profit chart with trade markers and TradingView-style pan/zoom
+* View open/closed trades with pull-to-refresh on all screens
+* Check portfolio statistics and cumulative profit chart
+* Monitor bot profit/loss with color-coded trade cards
+* Switch between multiple bots
+* Interactive price chart with trade entry/exit markers and pan/zoom
 * Terminal-style logs screen with color-coded log levels (INFO, WARNING, ERROR, DEBUG)
 * Force exit trades via limit order with P/L preview dialog
+* Friendly error screen with retry button when the bot is unreachable
 
 ## Screenshots
 ![photo_2025-10-22_19-22-04](https://github.com/user-attachments/assets/6128f770-56b8-463f-89da-3e89846261b7)
@@ -21,8 +22,8 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 
 | Platform | Download |
 |----------|----------|
-| Android | [![Download APK](https://img.shields.io/badge/Download-APK-brightgreen?style=for-the-badge&logo=android)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.0.0/freqtrade-visualizer-v1.0.0.apk) |
-| Linux x64 | [![Download Linux](https://img.shields.io/badge/Download-Linux_x64-blue?style=for-the-badge&logo=linux)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.0.0/freqtrade-visualizer-v1.0.0-linux-x64.tar.gz) |
+| Android | [![Download APK](https://img.shields.io/badge/Download-APK-brightgreen?style=for-the-badge&logo=android)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.1.0/freqtrade-visualizer-v1.1.0.apk) |
+| Linux x64 | [![Download Linux](https://img.shields.io/badge/Download-Linux_x64-blue?style=for-the-badge&logo=linux)](https://github.com/saamy4r/Freqtrade_app/releases/download/v1.1.0/freqtrade-visualizer-v1.1.0-linux-x64.tar.gz) |
 
 > All releases: [github.com/saamy4r/Freqtrade_app/releases](https://github.com/saamy4r/Freqtrade_app/releases)
 
@@ -37,7 +38,7 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 1. Download the tarball using the button above.
 2. Extract it:
     ```bash
-    tar -xzf freqtrade-visualizer-v1.0.0-linux-x64.tar.gz
+    tar -xzf freqtrade-visualizer-v1.1.0-linux-x64.tar.gz
     ```
 3. Run the app:
     ```bash
