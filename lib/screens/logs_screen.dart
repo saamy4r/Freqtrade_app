@@ -4,7 +4,13 @@ import '../widgets/error_view.dart';
 
 class LogsScreen extends StatefulWidget {
   final ApiService apiService;
-  const LogsScreen({super.key, required this.apiService});
+  final bool isOffline;
+
+  const LogsScreen({
+    super.key,
+    required this.apiService,
+    required this.isOffline,
+  });
 
   @override
   State<LogsScreen> createState() => _LogsScreenState();
@@ -27,7 +33,8 @@ class _LogsScreenState extends State<LogsScreen> with AutomaticKeepAliveClientMi
   @override
   void didUpdateWidget(covariant LogsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl) {
+    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl ||
+        widget.isOffline != oldWidget.isOffline) {
       _fetchLogs();
     }
   }
@@ -39,6 +46,7 @@ class _LogsScreenState extends State<LogsScreen> with AutomaticKeepAliveClientMi
   }
 
   Future<void> _fetchLogs() async {
+    if (widget.isOffline) return;
     setState(() {
       _logs = null;
       _error = null;
@@ -87,6 +95,21 @@ class _LogsScreenState extends State<LogsScreen> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    if (widget.isOffline) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text('Logs unavailable offline', style: TextStyle(color: Colors.grey, fontSize: 16)),
+            SizedBox(height: 4),
+            Text('Connect to this bot to view live logs.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
+      );
+    }
 
     if (_error != null) {
       return ErrorView(message: _error!, onRetry: _fetchLogs);

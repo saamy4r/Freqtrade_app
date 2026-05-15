@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/bot.dart';
 import '../services/api_service.dart';
 import '../services/bot_storage.dart';
+import '../services/bot_cache_service.dart';
 import 'bots_screen.dart';
 import 'open_trades_screen.dart';
 import 'closed_trades_screen.dart';
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
   Bot? _activeBot;
   ApiService? _apiService;
   bool? _isDryRun;
+  bool _isOffline = false;
   int _selectedIndex = 0;
   bool _isConnecting = false;
   static const _activeBotKey = 'active_bot_id';
@@ -72,23 +74,35 @@ class _AppShellState extends State<AppShell> {
         _activeBot = bot;
         _isConnecting = true;
         _isDryRun = null;
+        _isOffline = false;
         _selectedIndex = 0;
       });
     }
+    final apiService = ApiService(baseUrl: bot.url);
     try {
-      final apiService = ApiService(baseUrl: bot.url);
       await apiService.login(bot.username, bot.password);
       final config = await apiService.showConfig();
       final isDryRun = config['dry_run'] as bool?;
+      await BotCacheService.merge(bot.id, {'config': config});
       if (mounted) {
         setState(() {
           _apiService = apiService;
           _isDryRun = isDryRun;
+          _isOffline = false;
           _isConnecting = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      final cache = await BotCacheService.load(bot.id);
+      if (cache != null && mounted) {
+        final cachedConfig = cache['config'] as Map<String, dynamic>?;
+        setState(() {
+          _apiService = apiService;
+          _isDryRun = cachedConfig?['dry_run'] as bool?;
+          _isOffline = true;
+          _isConnecting = false;
+        });
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to connect to ${bot.name}: $e')),
         );
@@ -96,6 +110,7 @@ class _AppShellState extends State<AppShell> {
           _activeBot = null;
           _apiService = null;
           _isDryRun = null;
+          _isOffline = false;
           _isConnecting = false;
         });
       }
@@ -133,6 +148,7 @@ class _AppShellState extends State<AppShell> {
       await prefs.remove(_activeBotKey);
     }
 
+    await BotCacheService.delete(botId);
     await BotStorage.deleteBot(botId);
     final allBots = await BotStorage.getBots();
 
@@ -161,12 +177,13 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+    final botId = _activeBot!.id;
     final screens = [
-      if (_apiService != null) OpenTradesScreen(apiService: _apiService!),
-      if (_apiService != null) ClosedTradesScreen(apiService: _apiService!),
-      if (_apiService != null) DashboardScreen(apiService: _apiService!),
-      if (_apiService != null) ChartScreen(apiService: _apiService!),
-      if (_apiService != null) LogsScreen(apiService: _apiService!),
+      if (_apiService != null) OpenTradesScreen(apiService: _apiService!, botId: botId, isOffline: _isOffline),
+      if (_apiService != null) ClosedTradesScreen(apiService: _apiService!, botId: botId, isOffline: _isOffline),
+      if (_apiService != null) DashboardScreen(apiService: _apiService!, botId: botId, isOffline: _isOffline),
+      if (_apiService != null) ChartScreen(apiService: _apiService!, botId: botId, isOffline: _isOffline),
+      if (_apiService != null) LogsScreen(apiService: _apiService!, isOffline: _isOffline),
       BotsScreen(
         bots: _bots,
         activeBot: _activeBot,
@@ -180,7 +197,17 @@ class _AppShellState extends State<AppShell> {
       appBar: AppBar(
         title: Text(_activeBot?.name ?? 'Connecting...'),
         actions: [
-          if (_isDryRun != null && !_isConnecting)
+          if (!_isConnecting && _isOffline)
+            const Padding(
+              padding: EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: Text(
+                  'OFFLINE',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber, fontSize: 16),
+                ),
+              ),
+            )
+          else if (_isDryRun != null && !_isConnecting)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Center(

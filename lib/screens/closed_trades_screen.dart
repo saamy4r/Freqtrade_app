@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/bot_cache_service.dart';
 import '../widgets/error_view.dart';
+import '../widgets/offline_banner.dart';
 
 class ClosedTradesScreen extends StatefulWidget {
   final ApiService apiService;
-  const ClosedTradesScreen({super.key, required this.apiService});
+  final String botId;
+  final bool isOffline;
+
+  const ClosedTradesScreen({
+    super.key,
+    required this.apiService,
+    required this.botId,
+    required this.isOffline,
+  });
 
   @override
   State<ClosedTradesScreen> createState() => _ClosedTradesScreenState();
@@ -15,6 +25,7 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
   List<dynamic>? _trades;
   Map<String, dynamic>? _balanceData;
   String? _error;
+  DateTime? _lastSynced;
 
   @override
   bool get wantKeepAlive => true;
@@ -28,7 +39,7 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
   @override
   void didUpdateWidget(covariant ClosedTradesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl) {
+    if (widget.botId != oldWidget.botId || widget.isOffline != oldWidget.isOffline) {
       _fetchData();
     }
   }
@@ -40,6 +51,12 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
       _balanceData = null;
       _error = null;
     });
+
+    if (widget.isOffline) {
+      await _loadFromCache();
+      return;
+    }
+
     try {
       final results = await Future.wait([
         widget.apiService.getProfitSummary(),
@@ -53,6 +70,12 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
         final dateB = b['close_date'] ?? '';
         return dateB.compareTo(dateA);
       });
+      await BotCacheService.merge(widget.botId, {
+        'closedTrades': trades,
+        'profit': results[0],
+        'balance': results[2],
+      });
+      if (!mounted) return;
       setState(() {
         _profitSummary = results[0] as Map<String, dynamic>;
         _trades = trades;
@@ -62,6 +85,25 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
       if (!mounted) return;
       setState(() => _error = e.toString());
     }
+  }
+
+  Future<void> _loadFromCache() async {
+    final cache = await BotCacheService.load(widget.botId);
+    if (!mounted) return;
+    if (cache == null) {
+      setState(() => _error = 'No cached data available for this bot.');
+      return;
+    }
+    final trades = (cache['closedTrades'] as List?)?.cast<dynamic>() ?? [];
+    final profit = (cache['profit'] as Map?)?.cast<String, dynamic>();
+    final balance = (cache['balance'] as Map?)?.cast<String, dynamic>();
+    final rawSynced = cache['lastSynced'] as String?;
+    setState(() {
+      _profitSummary = profit;
+      _trades = trades;
+      _balanceData = balance;
+      _lastSynced = rawSynced != null ? DateTime.tryParse(rawSynced) : null;
+    });
   }
 
   Widget _buildInfoColumn(String title, String value, {CrossAxisAlignment? alignment}) {
@@ -97,6 +139,7 @@ class _ClosedTradesScreenState extends State<ClosedTradesScreen> with AutomaticK
 
     return Column(
       children: [
+        if (widget.isOffline) OfflineBanner(lastSynced: _lastSynced),
         Card(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           elevation: 2,

@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/bot_cache_service.dart';
 import '../widgets/error_view.dart';
+import '../widgets/offline_banner.dart';
 
 class OpenTradesScreen extends StatefulWidget {
   final ApiService apiService;
-  const OpenTradesScreen({super.key, required this.apiService});
+  final String botId;
+  final bool isOffline;
+
+  const OpenTradesScreen({
+    super.key,
+    required this.apiService,
+    required this.botId,
+    required this.isOffline,
+  });
 
   @override
   State<OpenTradesScreen> createState() => _OpenTradesScreenState();
@@ -16,6 +26,7 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
   double? _freeBalance;
   double? _stakedAmount;
   String? _error;
+  DateTime? _lastSynced;
 
   @override
   bool get wantKeepAlive => true;
@@ -29,7 +40,7 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
   @override
   void didUpdateWidget(covariant OpenTradesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl) {
+    if (widget.botId != oldWidget.botId || widget.isOffline != oldWidget.isOffline) {
       _fetchData();
     }
   }
@@ -42,6 +53,11 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
       _stakedAmount = null;
       _error = null;
     });
+
+    if (widget.isOffline) {
+      await _loadFromCache();
+      return;
+    }
 
     try {
       final results = await Future.wait([
@@ -69,6 +85,11 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
         final dateB = b['open_date'] ?? '';
         return dateB.compareTo(dateA);
       });
+      await BotCacheService.merge(widget.botId, {
+        'openTrades': tradesResult,
+        'balance': balanceResult,
+      });
+      if (!mounted) return;
       setState(() {
         _trades = tradesResult;
         _balance = balanceResult;
@@ -77,10 +98,40 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
+      setState(() => _error = e.toString());
     }
+  }
+
+  Future<void> _loadFromCache() async {
+    final cache = await BotCacheService.load(widget.botId);
+    if (!mounted) return;
+    if (cache == null) {
+      setState(() => _error = 'No cached data available for this bot.');
+      return;
+    }
+    final tradesResult = (cache['openTrades'] as List?)?.cast<dynamic>() ?? [];
+    final balanceResult = (cache['balance'] as Map?)?.cast<String, dynamic>() ?? {};
+    double freeBalance = 0.0;
+    double stakedAmount = 0.0;
+    if (balanceResult['currencies'] is List) {
+      final currencies = balanceResult['currencies'] as List<dynamic>;
+      final stakeCurrencyData = currencies.firstWhere(
+        (c) => c['is_position'] == false,
+        orElse: () => null,
+      );
+      if (stakeCurrencyData != null) {
+        freeBalance = stakeCurrencyData['free']?.toDouble() ?? 0.0;
+        stakedAmount = stakeCurrencyData['used']?.toDouble() ?? 0.0;
+      }
+    }
+    final rawSynced = cache['lastSynced'] as String?;
+    setState(() {
+      _trades = tradesResult;
+      _balance = balanceResult.isEmpty ? null : balanceResult;
+      _freeBalance = freeBalance;
+      _stakedAmount = stakedAmount;
+      _lastSynced = rawSynced != null ? DateTime.tryParse(rawSynced) : null;
+    });
   }
 
   Future<void> _showExitDialog(Map<String, dynamic> trade) async {
@@ -148,6 +199,7 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
 
     return Column(
       children: [
+        if (widget.isOffline) OfflineBanner(lastSynced: _lastSynced),
         Card(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           elevation: 2,
@@ -302,16 +354,17 @@ class _OpenTradesScreenState extends State<OpenTradesScreen> with AutomaticKeepA
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text('Opened: $openDate', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                  TextButton.icon(
-                                    onPressed: () => _showExitDialog(trade),
-                                    icon: const Icon(Icons.exit_to_app, size: 16),
-                                    label: const Text('Exit', style: TextStyle(fontSize: 12)),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.orange,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      visualDensity: VisualDensity.compact,
+                                  if (!widget.isOffline)
+                                    TextButton.icon(
+                                      onPressed: () => _showExitDialog(trade),
+                                      icon: const Icon(Icons.exit_to_app, size: 16),
+                                      label: const Text('Exit', style: TextStyle(fontSize: 12)),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.orange,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               )
                             ],

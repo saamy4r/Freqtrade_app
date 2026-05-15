@@ -7,7 +7,15 @@ import '../widgets/error_view.dart';
 
 class ChartScreen extends StatefulWidget {
   final ApiService apiService;
-  const ChartScreen({super.key, required this.apiService});
+  final String botId;
+  final bool isOffline;
+
+  const ChartScreen({
+    super.key,
+    required this.apiService,
+    required this.botId,
+    required this.isOffline,
+  });
 
   @override
   State<ChartScreen> createState() => _ChartScreenState();
@@ -43,8 +51,12 @@ class _ChartScreenState extends State<ChartScreen> with AutomaticKeepAliveClient
   @override
   void didUpdateWidget(covariant ChartScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl) {
-      _fetchInitialData();
+    if (widget.botId != oldWidget.botId || widget.isOffline != oldWidget.isOffline) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+        _selectedPair = null;
+      });
     }
   }
 
@@ -312,6 +324,21 @@ class _ChartScreenState extends State<ChartScreen> with AutomaticKeepAliveClient
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    if (widget.isOffline) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text('Chart unavailable offline', style: TextStyle(color: Colors.grey, fontSize: 16)),
+            SizedBox(height: 4),
+            Text('Connect to this bot to view live charts.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
+      );
+    }
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {

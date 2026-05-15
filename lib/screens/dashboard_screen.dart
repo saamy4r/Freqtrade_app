@@ -2,12 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/bot_cache_service.dart';
 import '../widgets/stat_tile.dart';
 import '../widgets/error_view.dart';
+import '../widgets/offline_banner.dart';
 
 class DashboardScreen extends StatefulWidget {
   final ApiService apiService;
-  const DashboardScreen({super.key, required this.apiService});
+  final String botId;
+  final bool isOffline;
+
+  const DashboardScreen({
+    super.key,
+    required this.apiService,
+    required this.botId,
+    required this.isOffline,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -19,6 +29,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   Map<String, dynamic>? _config;
   Map<String, dynamic>? _balanceData;
   String? _error;
+  DateTime? _lastSynced;
 
   @override
   bool get wantKeepAlive => true;
@@ -32,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   @override
   void didUpdateWidget(covariant DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.apiService.baseUrl != oldWidget.apiService.baseUrl) {
+    if (widget.botId != oldWidget.botId || widget.isOffline != oldWidget.isOffline) {
       _fetchData();
     }
   }
@@ -45,6 +56,12 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       _balanceData = null;
       _error = null;
     });
+
+    if (widget.isOffline) {
+      await _loadFromCache();
+      return;
+    }
+
     try {
       final results = await Future.wait([
         widget.apiService.getProfitSummary(),
@@ -52,6 +69,13 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
         widget.apiService.showConfig(),
         widget.apiService.getBalance(),
       ]);
+      if (!mounted) return;
+      await BotCacheService.merge(widget.botId, {
+        'profit': results[0],
+        'closedTrades': results[1],
+        'config': results[2],
+        'balance': results[3],
+      });
       if (!mounted) return;
       setState(() {
         _profitSummary = results[0] as Map<String, dynamic>;
@@ -63,6 +87,23 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       if (!mounted) return;
       setState(() => _error = e.toString());
     }
+  }
+
+  Future<void> _loadFromCache() async {
+    final cache = await BotCacheService.load(widget.botId);
+    if (!mounted) return;
+    if (cache == null) {
+      setState(() => _error = 'No cached data available for this bot.');
+      return;
+    }
+    final rawSynced = cache['lastSynced'] as String?;
+    setState(() {
+      _profitSummary = (cache['profit'] as Map?)?.cast<String, dynamic>();
+      _trades = (cache['closedTrades'] as List?)?.cast<dynamic>();
+      _config = (cache['config'] as Map?)?.cast<String, dynamic>();
+      _balanceData = (cache['balance'] as Map?)?.cast<String, dynamic>();
+      _lastSynced = rawSynced != null ? DateTime.tryParse(rawSynced) : null;
+    });
   }
 
   ({List<FlSpot> spots, DateTime? firstDate, DateTime? lastDate, bool isPercentageChart}) _prepareChartData(
@@ -170,7 +211,12 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     final startingCapital = profitSummary['starting_capital']?.toDouble() ?? 0.0;
 
     if (trades.isEmpty) {
-      return const Center(child: Text('No trades found to build dashboard.'));
+      return Column(
+        children: [
+          if (widget.isOffline) OfflineBanner(lastSynced: _lastSynced),
+          const Expanded(child: Center(child: Text('No trades found to build dashboard.'))),
+        ],
+      );
     }
 
     final chartData = _prepareChartData(trades, startingCapital);
@@ -189,9 +235,12 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       bottomTitleInterval = const Duration(days: 1).inMilliseconds.toDouble();
     }
 
-    return RefreshIndicator(
-      onRefresh: _fetchData,
-      child: AnimatedContainer(
+    return Column(
+      children: [
+        if (widget.isOffline) OfflineBanner(lastSynced: _lastSynced),
+        Expanded(child: RefreshIndicator(
+          onRefresh: _fetchData,
+          child: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOut,
         color: overallProfitPercent > 0
@@ -337,7 +386,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
             ),
           ),
         ),
-      ),
+        ))),
+      ],
     );
   }
 }
