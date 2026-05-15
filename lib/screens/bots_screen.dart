@@ -11,6 +11,7 @@ class BotsScreen extends StatefulWidget {
   final VoidCallback onAddBot;
   final Function(Bot) onSelectBot;
   final Function(String) onDeleteBot;
+  final Function(int oldIndex, int newIndex) onReorderBots;
 
   const BotsScreen({
     super.key,
@@ -19,6 +20,7 @@ class BotsScreen extends StatefulWidget {
     required this.onAddBot,
     required this.onSelectBot,
     required this.onDeleteBot,
+    required this.onReorderBots,
   });
 
   @override
@@ -56,6 +58,71 @@ class _BotsScreenState extends State<BotsScreen> {
     }
   }
 
+  Future<void> _confirmDelete(Bot bot) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF3A1B1B) : Colors.red.shade50,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.red, width: 1.5),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.smart_toy_outlined, color: Colors.red, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Remove Bot', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(
+                    bot.name,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.red.shade700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Divider(height: 20),
+            Text(
+              'Remove "${bot.name}" from your bot list?\n\nThis also deletes all locally cached data for this bot.',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: const Text('Remove'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade600),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) widget.onDeleteBot(bot.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.bots.isEmpty) {
@@ -78,21 +145,22 @@ class _BotsScreenState extends State<BotsScreen> {
       );
     }
 
-    return ListView.builder(
-      itemCount: widget.bots.length + 1,
-      itemBuilder: (context, index) {
-        if (index == widget.bots.length) {
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text("Add Another Bot"),
-              onPressed: widget.onAddBot,
-            ),
-          );
-        }
-
-        final bot = widget.bots[index];
+    return ReorderableListView(
+      onReorder: (oldIndex, newIndex) {
+        if (newIndex > oldIndex) newIndex--;
+        widget.onReorderBots(oldIndex, newIndex);
+      },
+      footer: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.add),
+          label: const Text("Add Another Bot"),
+          onPressed: widget.onAddBot,
+        ),
+      ),
+      children: widget.bots.asMap().entries.map((entry) {
+        final index = entry.key;
+        final bot = entry.value;
         final bool isActive = bot.id == widget.activeBot?.id;
         final bool? isOnline = _onlineStatus[bot.id];
 
@@ -105,23 +173,24 @@ class _BotsScreenState extends State<BotsScreen> {
           statusColor = Colors.red;
         }
 
-        final statusDot = Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: statusColor,
-            shape: BoxShape.circle,
-          ),
-        );
-
         return Card(
+          key: ValueKey(bot.id),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: ListTile(
             leading: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                statusDot,
-                const SizedBox(width: 12),
+                ReorderableDragStartListener(
+                  index: index,
+                  child: const Icon(Icons.drag_handle, color: Colors.grey, size: 20),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 10),
                 Icon(Icons.smart_toy_outlined, color: isActive ? Theme.of(context).primaryColor : Colors.grey),
               ],
             ),
@@ -129,13 +198,13 @@ class _BotsScreenState extends State<BotsScreen> {
             subtitle: Text(bot.url, overflow: TextOverflow.ellipsis),
             trailing: IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: () => widget.onDeleteBot(bot.id),
+              onPressed: () => _confirmDelete(bot),
             ),
             onTap: () => widget.onSelectBot(bot),
-            tileColor: isActive ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
+            tileColor: isActive ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : null,
           ),
         );
-      },
+      }).toList(),
     );
   }
 }

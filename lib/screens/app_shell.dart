@@ -140,6 +140,14 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _reorderBots(int oldIndex, int newIndex) async {
+    setState(() {
+      final bot = _bots.removeAt(oldIndex);
+      _bots.insert(newIndex, bot);
+    });
+    await BotStorage.saveBots(_bots);
+  }
+
   Future<void> _deleteBot(String botId) async {
     final wasActiveBot = _activeBot?.id == botId;
 
@@ -174,6 +182,7 @@ class _AppShellState extends State<AppShell> {
         onAddBot: _addBot,
         onSelectBot: _selectBot,
         onDeleteBot: _deleteBot,
+        onReorderBots: _reorderBots,
       );
     }
 
@@ -190,6 +199,7 @@ class _AppShellState extends State<AppShell> {
         onAddBot: _addBot,
         onSelectBot: _userSelectBot,
         onDeleteBot: _deleteBot,
+        onReorderBots: _reorderBots,
       ),
     ];
 
