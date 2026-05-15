@@ -15,8 +15,11 @@ A simple, open-source Flutter application for visualizing and monitoring your Fr
 * Friendly error screen with retry button when the bot is unreachable
 
 ## Screenshots
-![photo_2025-10-22_19-22-04](https://github.com/user-attachments/assets/6128f770-56b8-463f-89da-3e89846261b7)
-![photo_2025-10-22_19-22-09](https://github.com/user-attachments/assets/77d4526b-ae63-43ac-8d03-95050ae226eb)
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/6128f770-56b8-463f-89da-3e89846261b7" width="48%">
+  <img src="https://github.com/user-attachments/assets/77d4526b-ae63-43ac-8d03-95050ae226eb" width="48%">
+</p>
 
 
 ## Download
