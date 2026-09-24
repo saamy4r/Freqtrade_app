@@ -31,6 +31,8 @@ pub fn Bots() -> Element {
     // the async block either: that subscribes the resource to something its
     // own completion changes, and it restarts forever.
     let liveness = use_resource(move || {
+        // A push re-pings every bot, so the dots follow reality.
+        let _ = app.revision.read();
         let ids: Vec<String> = app.bots.read().iter().map(|b| b.id.clone()).collect();
         async move {
             let mut out = Vec::with_capacity(ids.len());

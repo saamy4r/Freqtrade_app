@@ -20,13 +20,16 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 /// A server wired to a fresh in-memory store.
 struct Harness {
     app: axum::Router,
+    state: ft_server::AppState,
 }
 
 impl Harness {
     fn new() -> Self {
         let store = Arc::new(Store::in_memory(&StaticKey::random().unwrap()).unwrap());
+        let state = ft_server::AppState::new(store);
         Self {
-            app: ft_server::router(store, false),
+            app: ft_server::router_from_state(state.clone(), false, None),
+            state,
         }
     }
 
@@ -49,6 +52,11 @@ impl Harness {
 
     async fn get(&self, uri: &str) -> Response {
         self.request("GET", uri, None).await
+    }
+
+    /// Listens for server events, as a connected client would.
+    fn events(&self) -> tokio::sync::broadcast::Receiver<ft_server::events::ServerEvent> {
+        self.state.events().subscribe()
     }
 }
 
@@ -660,6 +668,9 @@ async fn an_unreachable_bot_still_renders_from_cache() {
 
     let warm: Envelope<Overview> = h.get(&format!("/api/bots/{id}/overview")).await.json();
     assert!(!warm.stale);
+    // Warm the config cache too: the header badge reads it, and with nothing
+    // cached the endpoint would correctly 503 rather than report staleness.
+    h.get(&format!("/api/bots/{id}/config")).await;
     let synced_at = warm.last_synced;
 
     // The bot goes away. `?refresh=true` is pull-to-refresh: it bypasses the
@@ -827,6 +838,103 @@ async fn candles_carry_trade_markers_for_the_visible_window() {
         "trades on another pair must not appear: {:?}",
         eth.data.overlays
     );
+}
+
+#[tokio::test]
+async fn adding_a_bot_announces_the_change() {
+    // Other open clients should see a new bot without reloading.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let mut events = h.events();
+
+    add_bot(&h, &server).await;
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+        .await
+        .expect("no event within 2s")
+        .expect("event channel closed");
+    assert_eq!(event, ft_server::events::ServerEvent::BotsChanged);
+}
+
+#[tokio::test]
+async fn the_event_stream_is_what_gates_background_work() {
+    // The sync loop runs only while someone is watching. On a phone that means
+    // only while the app is open, rather than waking the radio on a timer for
+    // a bot nobody is looking at.
+    let h = Harness::new();
+    assert!(!h.state.has_watchers(), "nothing should be watching yet");
+
+    let guard = h.state.subscribe();
+    assert!(h.state.has_watchers());
+
+    drop(guard);
+    assert!(
+        !h.state.has_watchers(),
+        "a disconnected client must stop the background sync"
+    );
+}
+
+#[tokio::test]
+async fn the_event_endpoint_serves_a_stream() {
+    // The body is deliberately not read: an event stream never ends, so
+    // draining it would hang the test forever. Checking the headers is the
+    // whole assertion — that the route exists and answers as a stream.
+    let h = Harness::new();
+    let request = Request::builder()
+        .method("GET")
+        .uri("/api/events")
+        .body(Body::empty())
+        .unwrap();
+    let response = h.app.clone().oneshot(request).await.unwrap();
+
+    assert!(response.status().is_success());
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("text/event-stream"),
+    );
+}
+
+#[tokio::test]
+async fn a_bot_discovered_offline_stays_flagged_even_from_a_fresh_cache() {
+    // The gap this closes: a background sync can find the bot gone while the
+    // cache is still inside its TTL. A request served from that cache has
+    // learned nothing about the bot, and used to report itself perfectly
+    // fresh -- so the offline banner never appeared until the cache expired.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let id = add_bot(&h, &server).await;
+
+    let warm: Envelope<Overview> = h.get(&format!("/api/bots/{id}/overview")).await.json();
+    assert!(!warm.stale);
+    // Warm the config cache too: the header badge reads it, and with nothing
+    // cached the endpoint would correctly 503 rather than report staleness.
+    h.get(&format!("/api/bots/{id}/config")).await;
+
+    // The bot goes away and something notices -- here, a forced refresh
+    // standing in for the background sync.
+    server.shutdown().await;
+    h.get(&format!("/api/bots/{id}/overview?refresh=true"))
+        .await;
+
+    // A plain read now hits a cache well inside its TTL, and must still say so.
+    let cached: Envelope<Overview> = h.get(&format!("/api/bots/{id}/overview")).await.json();
+    assert!(
+        cached.stale,
+        "a cache hit must inherit what we already know about the bot"
+    );
+    assert_eq!(
+        cached.data.open_trades.len(),
+        1,
+        "cached data still renders"
+    );
+
+    // And the header badge, which reads config, agrees.
+    let config: Envelope<ft_types::freqtrade::BotConfig> =
+        h.get(&format!("/api/bots/{id}/config")).await.json();
+    assert!(config.stale, "the DRY/LIVE badge must flip to OFFLINE too");
 }
 
 #[tokio::test]

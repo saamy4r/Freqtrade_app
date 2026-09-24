@@ -31,8 +31,11 @@ pub fn Header() -> Element {
     // that changes as a result of its own completion, so it restarts forever —
     // a livelock that presents as the browser tab hanging on the first
     // re-render, with no panic and nothing in the console.
+    let revision = app.revision;
     let config = use_resource(move || {
         let id = active.read().clone();
+        // So the badge follows the bot in and out of reach on its own.
+        let _ = revision.read();
         async move {
             let id = id?;
             Some(api::config(&id, false).await)

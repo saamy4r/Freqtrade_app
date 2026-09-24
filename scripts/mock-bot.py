@@ -57,12 +57,18 @@ for i in range(500):
     message = template.format(pair=random.choice(["ETH/USDT:USDT", "SOL/USDT:USDT", "BTC/USDT:USDT"]), n=i)
     LOGS.append([stamp, epoch + 0.5, logger, level, message])
 
-OPEN = [{
-    "trade_id": N + 1, "pair": "ETH/USDT:USDT", "is_open": True, "is_short": False,
-    "stake_amount": 100.0, "open_rate": 2500.0, "current_rate": 2561.6,
-    "profit_ratio": 0.0616, "profit_abs": 6.16,
-    "open_timestamp": BASE + N * 7_200_000,
-}]
+def open_trades():
+    """The open trade's P/L drifts with the wall clock, so a client that is
+    merely watching can be seen to update without being touched."""
+    import time
+    rate = 2561.6 + math.sin(time.time() / 6) * 4.0
+    profit = round(rate - 2500.0, 4)
+    return [{
+        "trade_id": N + 1, "pair": "ETH/USDT:USDT", "is_open": True, "is_short": False,
+        "stake_amount": 100.0, "open_rate": 2500.0, "current_rate": round(rate, 4),
+        "profit_ratio": round(profit / 100, 6), "profit_abs": profit,
+        "open_timestamp": BASE + N * STEP,
+    }]
 
 def route(path, query):
     if path.endswith("/ping"): return {"status": "pong"}
@@ -74,7 +80,7 @@ def route(path, query):
                 "max_open_trades": 2.0, "stoploss": -0.1, "stoploss_on_exchange": False,
                 "timeframe": "2h", "exchange": "binance", "strategy": "SMCStrategy2h",
                 "bot_name": "mock", "state": "running", "runmode": "dry_run"}
-    if path.endswith("/status"): return OPEN
+    if path.endswith("/status"): return open_trades()
     if path.endswith("/trades"):
         limit = int(query.get("limit", ["50"])[0]); offset = int(query.get("offset", ["0"])[0])
         page = TRADES[offset:offset + limit]

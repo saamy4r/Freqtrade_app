@@ -12,12 +12,18 @@ use crate::state::App;
 pub fn Chart() -> Element {
     let app = App::get();
     let active = app.active;
+    let revision = app.revision;
     let mut selected = use_signal(|| None::<String>);
     let mut force = use_signal(|| false);
 
     // The dropdown's contents: whitelist plus any pair with an open trade.
     let pairs = use_resource(move || {
         let id = active.read().clone();
+        // A server push bumps this, which re-runs the resource. Reading it
+        // here rather than reacting separately means live updates and manual
+        // loads share one code path.
+        let _ = revision.read();
+
         async move {
             let id = id?;
             Some(api::pairs(&id, false).await)

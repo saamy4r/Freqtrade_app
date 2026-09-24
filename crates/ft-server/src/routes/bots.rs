@@ -8,6 +8,7 @@ use ft_store::NewBot;
 use ft_types::api::{ActionResult, AddBotRequest, BotSummary, PingResult, ReorderRequest};
 
 use crate::error::{ApiError, ApiResult};
+use crate::events::ServerEvent;
 use crate::state::AppState;
 
 fn summarize(bot: ft_store::BotRecord) -> BotSummary {
@@ -55,6 +56,8 @@ pub async fn add(
         password: body.password,
     })?;
     tracing::info!(id = %bot.id, name = %bot.name, "bot added");
+    // Other open clients should see the new bot without reloading.
+    let _ = state.events().send(ServerEvent::BotsChanged);
     Ok(Json(summarize(bot)))
 }
 
@@ -67,6 +70,7 @@ pub async fn delete(
         return Err(ApiError::UnknownBot(bot_id));
     }
     state.forget_client(&bot_id).await;
+    let _ = state.events().send(ServerEvent::BotsChanged);
     Ok(Json(ActionResult {
         message: "bot removed".to_owned(),
     }))
@@ -77,6 +81,7 @@ pub async fn reorder(
     Json(body): Json<ReorderRequest>,
 ) -> ApiResult<Json<Vec<BotSummary>>> {
     state.store().reorder_bots(&body.ids)?;
+    let _ = state.events().send(ServerEvent::BotsChanged);
     list(State(state)).await
 }
 

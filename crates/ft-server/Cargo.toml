@@ -24,6 +24,8 @@ tracing-subscriber.workspace = true
 time.workspace = true
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-core = "0.3"
 tower-http = { version = "0.7", features = ["cors", "fs", "trace", "set-header"] }
 
 [dev-dependencies]

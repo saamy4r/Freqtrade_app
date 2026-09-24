@@ -50,6 +50,10 @@ pub struct App {
     /// the "no bots" empty state before it knows.
     pub loading: Signal<bool>,
     pub error: Signal<Option<String>>,
+    /// Bumped whenever the server reports new data. Screens read it inside
+    /// their resource closure, which makes a push arrive as an ordinary
+    /// dependency change rather than a separate update path.
+    pub revision: Signal<u64>,
 }
 
 impl App {
@@ -61,11 +65,37 @@ impl App {
             theme: Signal::new(Theme::Dark),
             loading: Signal::new(true),
             error: Signal::new(None),
+            revision: Signal::new(0),
         });
 
         use_future(move || async move {
             let mut app = app;
             app.load_initial().await;
+        });
+
+        // Live updates from the server.
+        //
+        // The browser calls back on an event, but that callback runs outside
+        // Dioxus's runtime, and writing a signal from there marks it dirty
+        // without scheduling a render — the value changes and nothing redraws.
+        // So the callback only sends on a channel, and the signal is written
+        // here inside the future, where the runtime is active.
+        //
+        // The subscription itself lives in this future, which lives as long as
+        // the app; dropping it would close the stream and, with it, stop the
+        // server's background sync.
+        use_future(move || async move {
+            use futures_util::StreamExt;
+
+            let (sender, mut receiver) = futures_channel::mpsc::unbounded::<()>();
+            let _subscription = crate::events::subscribe(move || {
+                let _ = sender.unbounded_send(());
+            });
+
+            let mut revision = app.revision;
+            while receiver.next().await.is_some() {
+                revision += 1;
+            }
         });
 
         app

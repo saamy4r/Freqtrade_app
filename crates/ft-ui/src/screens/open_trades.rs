@@ -15,6 +15,7 @@ use crate::state::App;
 pub fn OpenTrades() -> Element {
     let app = App::get();
     let active = app.active;
+    let revision = app.revision;
     // Read with `peek` in the resource, so it is not a dependency: a refresh
     // is triggered by restarting the resource, not by this flag changing,
     // which would otherwise fetch twice.
@@ -25,6 +26,11 @@ pub fn OpenTrades() -> Element {
         // Reading them inside the async block instead makes the resource
         // restart on its own completion.
         let id = active.read().clone();
+        // A server push bumps this, which re-runs the resource. Reading it
+        // here rather than reacting separately means live updates and manual
+        // loads share one code path.
+        let _ = revision.read();
+
         let forced = *force.peek();
         async move {
             let id = id?;
@@ -37,6 +43,7 @@ pub fn OpenTrades() -> Element {
         }
     });
     // `Resource` is `Copy`, so refreshing is just a closure over it.
+
     let mut refresh = move || {
         force.set(true);
         data.restart();

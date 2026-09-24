@@ -52,11 +52,18 @@ fn Shell() -> Element {
     let state = AppState::get();
     let has_bots = !state.bots.read().is_empty();
     let settled = !*state.loading.read();
+    let has_active = state.active.read().is_some();
 
     rsx! {
         Header {}
         if settled && !has_bots {
             Bots {}
+        } else if !has_active {
+            // Screens are not mounted until a bot is selected. Mounting them
+            // earlier meant each one ran its fetch with no bot id, returned
+            // nothing, and then sat on that result — a permanent spinner
+            // behind a header that was showing the bot's name perfectly well.
+            div { class: "empty", span { class: "spinner" } }
         } else {
             Outlet::<Route> {}
         }

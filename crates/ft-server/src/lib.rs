@@ -13,9 +13,11 @@
 
 pub mod compute;
 mod error;
+pub mod events;
 mod fetch;
 pub mod routes;
 mod state;
+mod sync;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
@@ -55,10 +57,25 @@ pub fn router_with_ui(
     dev_cors: bool,
     ui_dir: Option<std::path::PathBuf>,
 ) -> Router {
-    let state = AppState::new(store);
+    router_from_state(AppState::new(store), dev_cors, ui_dir)
+}
+
+/// As [`router_with_ui`], from an existing state.
+///
+/// Exposed so a caller can hold the same [`AppState`] the router uses — tests
+/// subscribe to its event channel to observe what the server announces.
+pub fn router_from_state(
+    state: AppState,
+    dev_cors: bool,
+    ui_dir: Option<std::path::PathBuf>,
+) -> Router {
+    // The background refresh runs for the life of the process, gated on
+    // whether anyone is actually watching.
+    sync::spawn(state.clone());
 
     let api = Router::new()
         .route("/health", get(health))
+        .route("/events", get(events::stream))
         .route("/bots", get(routes::bots::list).post(routes::bots::add))
         .route("/bots/order", put(routes::bots::reorder))
         .route("/bots/{id}", delete(routes::bots::delete))

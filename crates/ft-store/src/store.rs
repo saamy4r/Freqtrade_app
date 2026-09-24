@@ -30,6 +30,13 @@ pub mod kind {
     /// Freshness marks. The data lives in the `trades` table; these rows exist
     /// only to record when that table was last synced, reusing `fetched_at`
     /// rather than adding a column to every trade.
+    /// Whether the bot answered the last time anyone tried.
+    ///
+    /// Staleness cannot be inferred from cache age alone: a background sync
+    /// can discover the bot is gone while the cache is still well inside its
+    /// TTL, and a request served from that cache would otherwise report itself
+    /// perfectly fresh.
+    pub const REACHABLE: &str = "mark:reachable";
     pub const OPEN_MARK: &str = "mark:open";
     pub const CLOSED_MARK: &str = "mark:closed";
 }

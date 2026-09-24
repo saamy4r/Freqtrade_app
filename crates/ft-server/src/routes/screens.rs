@@ -75,9 +75,12 @@ pub async fn config(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<BotConfig>>> {
-    Ok(Json(
-        load_config(&state, &bot_id, &q).await?.into_envelope(),
-    ))
+    // The header badge reads this endpoint, so it has to learn about an
+    // outage even when the config itself is cached and long-lived.
+    let offline = fetch::known_offline(&state, &bot_id);
+    let mut envelope = load_config(&state, &bot_id, &q).await?.into_envelope();
+    envelope.stale |= offline;
+    Ok(Json(envelope))
 }
 
 async fn load_config(
@@ -85,6 +88,9 @@ async fn load_config(
     bot_id: &str,
     q: &ScreenQuery,
 ) -> ApiResult<fetch::Fetched<BotConfig>> {
+    if let Some(cached) = fetch::offline_cache(state, bot_id, kind::CONFIG, "configuration")? {
+        return Ok(cached);
+    }
     let client = state.client(bot_id).await?;
     fetch::snapshot(
         state,
@@ -102,6 +108,9 @@ async fn load_balance(
     bot_id: &str,
     q: &ScreenQuery,
 ) -> ApiResult<fetch::Fetched<Balance>> {
+    if let Some(cached) = fetch::offline_cache(state, bot_id, kind::BALANCE, "balance")? {
+        return Ok(cached);
+    }
     let client = state.client(bot_id).await?;
     fetch::snapshot(
         state,
@@ -119,6 +128,9 @@ async fn load_profit(
     bot_id: &str,
     q: &ScreenQuery,
 ) -> ApiResult<fetch::Fetched<ProfitSummary>> {
+    if let Some(cached) = fetch::offline_cache(state, bot_id, kind::PROFIT, "profit summary")? {
+        return Ok(cached);
+    }
     let client = state.client(bot_id).await?;
     fetch::snapshot(
         state,
@@ -141,12 +153,28 @@ async fn load_open_trades(
     bot_id: &str,
     q: &ScreenQuery,
 ) -> ApiResult<fetch::Fetched<Vec<Trade>>> {
-    let client = state.client(bot_id).await?;
     let store = state.store();
+    let mark = store.snapshot::<()>(bot_id, kind::OPEN_MARK)?;
+
+    // Known unreachable: serve the stored set rather than waiting out another
+    // connection timeout. See the note in `fetch::snapshot`.
+    if fetch::known_offline(state, bot_id) {
+        return match mark {
+            Some(hit) => Ok(fetch::Fetched {
+                value: store.open_trades(bot_id)?,
+                fetched_at: Some(hit.fetched_at),
+                stale: true,
+            }),
+            None => Err(ApiError::NoCache {
+                what: "open trades",
+            }),
+        };
+    }
+
+    let client = state.client(bot_id).await?;
 
     // The mark records when open trades were last synced; the trades
     // themselves live in their own table, so there is nothing to cache twice.
-    let mark = store.snapshot::<()>(bot_id, kind::OPEN_MARK)?;
     if let Some(hit) = &mark {
         if hit.age() <= q.ttl(ttl::TRADES) {
             return Ok(fetch::Fetched {
@@ -161,6 +189,7 @@ async fn load_open_trades(
         Ok(trades) => {
             store.replace_open_trades(bot_id, &trades)?;
             store.put_snapshot(bot_id, kind::OPEN_MARK, &())?;
+            fetch::record_reachable(state, bot_id, true);
             Ok(fetch::Fetched {
                 value: trades,
                 fetched_at: Some(fetch::now()),
@@ -169,11 +198,14 @@ async fn load_open_trades(
         }
         // Having synced before is what makes an empty list meaningful: without
         // a mark we cannot tell "no open trades" from "never fetched".
-        Err(e) if e.is_offline() && mark.is_some() => Ok(fetch::Fetched {
-            value: store.open_trades(bot_id)?,
-            fetched_at: mark.map(|m| m.fetched_at),
-            stale: true,
-        }),
+        Err(e) if e.is_offline() && mark.is_some() => {
+            fetch::record_reachable(state, bot_id, false);
+            Ok(fetch::Fetched {
+                value: store.open_trades(bot_id)?,
+                fetched_at: mark.map(|m| m.fetched_at),
+                stale: true,
+            })
+        }
         Err(e) if e.is_offline() => Err(ApiError::NoCache {
             what: "open trades",
         }),
@@ -191,10 +223,20 @@ async fn sync_closed_trades(
     bot_id: &str,
     q: &ScreenQuery,
 ) -> ApiResult<fetch::Fetched<u32>> {
-    let client = state.client(bot_id).await?;
     let store = state.store();
-
     let mark = store.snapshot::<()>(bot_id, kind::CLOSED_MARK)?;
+
+    // Known unreachable: report what we hold rather than waiting out a login
+    // that cannot succeed.
+    if fetch::known_offline(state, bot_id) {
+        return Ok(fetch::Fetched {
+            value: store.closed_trade_count(bot_id)?,
+            fetched_at: mark.map(|m| m.fetched_at),
+            stale: true,
+        });
+    }
+
+    let client = state.client(bot_id).await?;
     if let Some(hit) = &mark {
         if hit.age() <= q.ttl(ttl::TRADES) {
             return Ok(fetch::Fetched {
@@ -299,7 +341,7 @@ pub async fn overview(
 
     Ok(Json(Envelope {
         data,
-        stale: trades.stale || balance.stale,
+        stale: trades.stale || balance.stale || fetch::known_offline(&state, &bot_id),
         last_synced: oldest(trades.fetched_at, balance.fetched_at),
     }))
 }
@@ -334,7 +376,7 @@ pub async fn closed(
 
     Ok(Json(Envelope {
         data,
-        stale: sync.stale || balance.stale || profit.stale,
+        stale: sync.stale || balance.stale || profit.stale || fetch::known_offline(&state, &bot_id),
         last_synced: oldest(
             sync.fetched_at,
             oldest(balance.fetched_at, profit.fetched_at),
@@ -384,7 +426,11 @@ pub async fn dashboard(
 
     Ok(Json(Envelope {
         data,
-        stale: sync.stale || profit.stale || config.stale || balance.stale,
+        stale: sync.stale
+            || profit.stale
+            || config.stale
+            || balance.stale
+            || fetch::known_offline(&state, &bot_id),
         last_synced: oldest(
             sync.fetched_at,
             oldest(
@@ -401,22 +447,29 @@ pub async fn logs(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Logs>>> {
-    let client = state.client(&bot_id).await?;
-    let fetched = fetch::snapshot(
-        &state,
-        &bot_id,
-        kind::LOGS,
-        q.ttl(ttl::LOGS),
-        "logs",
-        || async move { client.logs(LOG_LIMIT).await },
-    )
-    .await?;
+    let offline = fetch::offline_cache::<LogsResponse>(&state, &bot_id, kind::LOGS, "logs")?;
+    let fetched = match offline {
+        Some(cached) => cached,
+        None => {
+            let client = state.client(&bot_id).await?;
+            fetch::snapshot(
+                &state,
+                &bot_id,
+                kind::LOGS,
+                q.ttl(ttl::LOGS),
+                "logs",
+                || async move { client.logs(LOG_LIMIT).await },
+            )
+            .await?
+        }
+    };
 
-    Ok(Json(
-        fetched
-            .into_envelope()
-            .map(|r: LogsResponse| Logs { entries: r.logs }),
-    ))
+    let offline = fetch::known_offline(&state, &bot_id);
+    let mut envelope = fetched
+        .into_envelope()
+        .map(|r: LogsResponse| Logs { entries: r.logs });
+    envelope.stale |= offline;
+    Ok(Json(envelope))
 }
 
 /// `GET /api/bots/:id/pairs` — the chart screen's dropdown.
@@ -428,16 +481,23 @@ pub async fn pairs(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Vec<ChartPair>>>> {
-    let client = state.client(&bot_id).await?;
-    let whitelist = fetch::snapshot(
-        &state,
-        &bot_id,
-        kind::WHITELIST,
-        q.ttl(ttl::WHITELIST),
-        "whitelist",
-        || async move { client.whitelist().await },
-    )
-    .await?;
+    let cached_whitelist =
+        fetch::offline_cache::<WhitelistResponse>(&state, &bot_id, kind::WHITELIST, "whitelist")?;
+    let whitelist = match cached_whitelist {
+        Some(cached) => cached,
+        None => {
+            let client = state.client(&bot_id).await?;
+            fetch::snapshot(
+                &state,
+                &bot_id,
+                kind::WHITELIST,
+                q.ttl(ttl::WHITELIST),
+                "whitelist",
+                || async move { client.whitelist().await },
+            )
+            .await?
+        }
+    };
     let open = load_open_trades(&state, &bot_id, &q).await?;
 
     let profit_for = |pair: &str| {
@@ -472,7 +532,7 @@ pub async fn pairs(
 
     Ok(Json(Envelope {
         data: pairs,
-        stale: whitelist.stale || open.stale,
+        stale: whitelist.stale || open.stale || fetch::known_offline(&state, &bot_id),
         last_synced: oldest(whitelist.fetched_at, open.fetched_at),
     }))
 }
@@ -493,8 +553,6 @@ pub async fn candles(
     if query.pair.trim().is_empty() {
         return Err(ApiError::BadRequest("a pair is required".into()));
     }
-    let client = state.client(&bot_id).await?;
-
     // Default to the bot's own timeframe rather than guessing 5m.
     let timeframe = match query.timeframe {
         Some(tf) if !tf.is_empty() => tf,
@@ -505,8 +563,27 @@ pub async fn candles(
             .unwrap_or_else(|| "5m".to_owned()),
     };
     let limit = query.limit.unwrap_or(CANDLE_LIMIT).clamp(1, 1500);
-
     let store = state.store();
+
+    if fetch::known_offline(&state, &bot_id) {
+        let cached = store.candles(&bot_id, &query.pair, &timeframe, limit)?;
+        if cached.is_empty() {
+            return Err(ApiError::NoCache { what: "candles" });
+        }
+        let overlays = build_overlays(store, &bot_id, &query.pair, &cached)?;
+        return Ok(Json(Envelope {
+            stale: true,
+            last_synced: None,
+            data: Candles {
+                pair: query.pair,
+                timeframe,
+                candles: cached,
+                overlays,
+            },
+        }));
+    }
+
+    let client = state.client(&bot_id).await?;
     let pair = query.pair.clone();
     let tf = timeframe.clone();
     let fetched = fetch::with_fallback(
@@ -532,7 +609,7 @@ pub async fn candles(
     let overlays = build_overlays(store, &bot_id, &query.pair, &fetched.value)?;
 
     Ok(Json(Envelope {
-        stale: fetched.stale,
+        stale: fetched.stale || fetch::known_offline(&state, &bot_id),
         last_synced: fetched.fetched_at,
         data: Candles {
             pair: query.pair,

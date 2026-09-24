@@ -53,6 +53,60 @@ pub fn now() -> OffsetDateTime {
         .unwrap_or_else(|_| OffsetDateTime::now_utc())
 }
 
+/// Records whether the bot answered, so every later read agrees about it.
+pub fn record_reachable(state: &AppState, bot_id: &str, reachable: bool) {
+    let previous = state
+        .store()
+        .snapshot::<bool>(bot_id, ft_store::kind::REACHABLE)
+        .ok()
+        .flatten()
+        .map(|c| c.value);
+    if previous != Some(reachable) {
+        tracing::debug!(bot_id, reachable, "bot reachability changed");
+    }
+    let _ = state
+        .store()
+        .put_snapshot(bot_id, ft_store::kind::REACHABLE, &reachable);
+}
+
+/// Whether the bot was unreachable the last time anyone tried.
+///
+/// A screen served entirely from a still-fresh cache has learned nothing about
+/// the bot, so it asks this rather than claiming freshness it cannot vouch for.
+pub fn known_offline(state: &AppState, bot_id: &str) -> bool {
+    state
+        .store()
+        .snapshot::<bool>(bot_id, ft_store::kind::REACHABLE)
+        .ok()
+        .flatten()
+        .is_some_and(|c| !c.value)
+}
+
+/// Cached data for a bot already known to be unreachable, if any.
+///
+/// Must be consulted *before* obtaining a client: logging in is itself a
+/// network call, so a dead bot fails there first and the caller never reaches
+/// any later check. Returns `Ok(None)` when the bot is not known to be down,
+/// meaning the caller should go ahead and fetch.
+pub fn offline_cache<T: serde::de::DeserializeOwned>(
+    state: &AppState,
+    bot_id: &str,
+    kind: &str,
+    what: &'static str,
+) -> ApiResult<Option<Fetched<T>>> {
+    if !known_offline(state, bot_id) {
+        return Ok(None);
+    }
+    match state.store().snapshot::<T>(bot_id, kind)? {
+        Some(hit) => Ok(Some(Fetched {
+            value: hit.value,
+            fetched_at: Some(hit.fetched_at),
+            stale: true,
+        })),
+        None => Err(ApiError::NoCache { what }),
+    }
+}
+
 /// A value plus where it came from.
 pub struct Fetched<T> {
     pub value: T,
@@ -88,6 +142,23 @@ where
 {
     let cached = state.store().snapshot::<T>(bot_id, kind)?;
 
+    // Already known to be unreachable: serve what we have and do not spend a
+    // connection timeout rediscovering it. A screen aggregates several of
+    // these, so re-attempting each one costs tens of seconds -- long enough
+    // that the next background refresh restarts the request before it
+    // finishes, leaving the screen stuck mid-load forever. Noticing the bot
+    // has come back is the background sync's job, off the request path.
+    if known_offline(state, bot_id) {
+        if let Some(hit) = cached {
+            return Ok(Fetched {
+                value: hit.value,
+                fetched_at: Some(hit.fetched_at),
+                stale: true,
+            });
+        }
+        return Err(ApiError::NoCache { what });
+    }
+
     if let Some(hit) = &cached {
         if hit.age() <= ttl {
             tracing::trace!(kind, "cache hit");
@@ -107,24 +178,28 @@ where
     match fetch().await {
         Ok(value) => {
             state.store().put_snapshot(bot_id, kind, &value)?;
+            record_reachable(state, bot_id, true);
             Ok(Fetched {
                 value,
                 fetched_at: Some(now()),
                 stale: false,
             })
         }
-        Err(e) if e.is_offline() => match cached {
-            // Unreachable, but we have something to show.
-            Some(hit) => {
-                tracing::debug!(kind, "bot unreachable, serving cache");
-                Ok(Fetched {
-                    value: hit.value,
-                    fetched_at: Some(hit.fetched_at),
-                    stale: true,
-                })
+        Err(e) if e.is_offline() => {
+            record_reachable(state, bot_id, false);
+            match cached {
+                // Unreachable, but we have something to show.
+                Some(hit) => {
+                    tracing::debug!(kind, "bot unreachable, serving cache");
+                    Ok(Fetched {
+                        value: hit.value,
+                        fetched_at: Some(hit.fetched_at),
+                        stale: true,
+                    })
+                }
+                None => Err(ApiError::NoCache { what }),
             }
-            None => Err(ApiError::NoCache { what }),
-        },
+        }
         // Auth failures and bot-side errors are real and must surface.
         Err(e) => Err(e.into()),
     }

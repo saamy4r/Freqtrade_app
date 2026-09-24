@@ -14,10 +14,16 @@ use crate::state::App;
 pub fn ClosedTrades() -> Element {
     let app = App::get();
     let active = app.active;
+    let revision = app.revision;
     let mut force = use_signal(|| false);
 
     let mut data = use_resource(move || {
         let id = active.read().clone();
+        // A server push bumps this, which re-runs the resource. Reading it
+        // here rather than reacting separately means live updates and manual
+        // loads share one code path.
+        let _ = revision.read();
+
         let forced = *force.peek();
         async move {
             let id = id?;
