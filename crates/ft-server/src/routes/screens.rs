@@ -7,7 +7,7 @@ use serde::Deserialize;
 use ft_store::kind;
 use ft_types::api::{
     ActionResult, Candles, ChartPair, ClosedTrades, CumulativeSeries, Dashboard, Envelope,
-    ForceExitBody, Logs, Overview,
+    ForceExitBody, Logs, Overview, TradeOverlay,
 };
 use ft_types::freqtrade::{
     Balance, BotConfig, LogsResponse, ProfitSummary, Trade, WhitelistResponse,
@@ -526,6 +526,11 @@ pub async fn candles(
         store.put_candles(&bot_id, &query.pair, &timeframe, &fetched.value)?;
     }
 
+    // Markers are computed here rather than in the UI: the trades are already
+    // in the store, and sending only what falls inside the visible window
+    // keeps a bot with thousands of trades from shipping all of them.
+    let overlays = build_overlays(store, &bot_id, &query.pair, &fetched.value)?;
+
     Ok(Json(Envelope {
         stale: fetched.stale,
         last_synced: fetched.fetched_at,
@@ -533,8 +538,56 @@ pub async fn candles(
             pair: query.pair,
             timeframe,
             candles: fetched.value,
+            overlays,
         },
     }))
+}
+
+/// Trades on `pair` that intersect the candle window.
+///
+/// A trade counts if either end lands in the window, or if it spans the whole
+/// of it — a position opened before the first candle and closed after the last
+/// one is still the most interesting thing on the chart.
+fn build_overlays(
+    store: &ft_store::Store,
+    bot_id: &str,
+    pair: &str,
+    candles: &[ft_types::freqtrade::Candle],
+) -> ApiResult<Vec<TradeOverlay>> {
+    let (Some(first), Some(last)) = (candles.first(), candles.last()) else {
+        return Ok(Vec::new());
+    };
+    let (from, to) = (first.time, last.time);
+
+    Ok(store
+        .trades_for_pair(bot_id, pair)?
+        .into_iter()
+        .filter_map(|trade| {
+            let entry_time = trade.opened_at()?.unix_timestamp_nanos() / 1_000_000;
+            let entry_time = entry_time as i64;
+            let exit_time = trade
+                .closed_at()
+                .map(|d| (d.unix_timestamp_nanos() / 1_000_000) as i64);
+
+            let ends_inside = (from..=to).contains(&entry_time)
+                || exit_time.is_some_and(|t| (from..=to).contains(&t));
+            let spans_window = entry_time < from && exit_time.is_none_or(|t| t > to);
+            if !ends_inside && !spans_window {
+                return None;
+            }
+
+            Some(TradeOverlay {
+                trade_id: trade.trade_id,
+                is_short: trade.is_short,
+                is_open: trade.is_open,
+                profit_ratio: trade.profit_ratio,
+                entry_time,
+                entry_price: trade.open_rate,
+                exit_time,
+                exit_price: trade.close_rate,
+            })
+        })
+        .collect())
 }
 
 /// `POST /api/bots/:id/forceexit`

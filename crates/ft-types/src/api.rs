@@ -198,12 +198,32 @@ pub struct ChartPair {
     pub open_profit_ratio: Option<f64>,
 }
 
+/// One trade drawn over the price chart.
+///
+/// Entry and exit are separate points joined by a line, which is what makes a
+/// chart worth looking at: you can see where the bot got in and out relative to
+/// the price it was reacting to. `exit_*` is `None` while the trade is open.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TradeOverlay {
+    pub trade_id: i64,
+    pub is_short: bool,
+    pub is_open: bool,
+    pub profit_ratio: f64,
+    /// Epoch milliseconds.
+    pub entry_time: i64,
+    pub entry_price: f64,
+    pub exit_time: Option<i64>,
+    pub exit_price: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Candles {
     pub pair: String,
     pub timeframe: String,
     /// Oldest first.
     pub candles: Vec<Candle>,
+    /// Trades on this pair that fall within the candle window.
+    pub overlays: Vec<TradeOverlay>,
 }
 
 // ---------------------------------------------------------------------------

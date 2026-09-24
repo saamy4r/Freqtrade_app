@@ -805,6 +805,31 @@ async fn settings_persist_the_active_bot_and_theme() {
 }
 
 #[tokio::test]
+async fn candles_carry_trade_markers_for_the_visible_window() {
+    // Markers are what make a price chart worth looking at, and computing
+    // them server-side means the UI never receives trades it cannot draw.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let id = add_bot(&h, &server).await;
+
+    // Sync trades first; overlays come from the store, not from the bot.
+    h.get(&format!("/api/bots/{id}/closed")).await;
+
+    // The mock's closed trades are all on SOL/USDT:USDT, within the candle
+    // window; ETH candles should therefore carry none.
+    let eth: Envelope<Candles> = h
+        .get(&format!("/api/bots/{id}/candles?pair=ETH%2FUSDT%3AUSDT"))
+        .await
+        .json();
+    assert_eq!(eth.data.candles.len(), 2);
+    assert!(
+        eth.data.overlays.is_empty(),
+        "trades on another pair must not appear: {:?}",
+        eth.data.overlays
+    );
+}
+
+#[tokio::test]
 async fn health_needs_no_bot() {
     let h = Harness::new();
     assert!(h.get("/api/health").await.status.is_success());

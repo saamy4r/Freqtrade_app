@@ -7,6 +7,13 @@ from urllib.parse import urlparse, parse_qs
 random.seed(7)
 N = 327
 BASE = 1_780_000_000_000  # epoch ms
+STEP = 7_200_000  # 2h, matching the mock timeframe
+
+def curve(ms):
+    """The same synthetic price the candles follow, so trade markers land on
+    the line rather than floating off it."""
+    i = (ms - BASE) / STEP
+    return 2500 + 120 * math.sin(i / 14)
 
 # A plausible equity curve: mostly small wins, occasional larger losses.
 TRADES = []
@@ -14,11 +21,13 @@ for i in range(1, N + 1):
     win = random.random() < 0.58
     profit = round(random.uniform(0.4, 4.2) if win else -random.uniform(0.3, 3.1), 4)
     close = BASE + i * 7_200_000 + random.randint(0, 3_000_000)
+    pair = random.choice(["ETH/USDT:USDT", "SOL/USDT:USDT", "BTC/USDT:USDT"])
     TRADES.append({
-        "trade_id": i, "pair": random.choice(["ETH/USDT:USDT", "SOL/USDT:USDT", "BTC/USDT:USDT"]),
+        "trade_id": i, "pair": pair,
         "is_open": False, "is_short": random.random() < 0.3,
-        "stake_amount": 100.0, "open_rate": round(random.uniform(100, 3000), 4),
-        "close_rate": round(random.uniform(100, 3000), 4),
+        "stake_amount": 100.0,
+        "open_rate": round(curve(close - STEP), 4),
+        "close_rate": round(curve(close), 4),
         "profit_ratio": round(profit / 100, 5), "profit_abs": profit,
         "open_timestamp": close - 7_200_000, "close_timestamp": close,
         "exit_reason": "roi" if win else "stop_loss",
@@ -69,8 +78,8 @@ def route(path, query):
         rows = []
         for i in range(300):
             t = BASE + i * 7_200_000
-            c = 2500 + 120 * math.sin(i / 14)
-            rows.append([None, c - 4, c + 9, c - 9, round(c, 3), 11.0, t])
+            c = curve(t)
+            rows.append([None, c - 4, c + 9, c - 9, round(c, 3), 11.0, t])  # close follows `curve`
         return {"pair": "ETH/USDT:USDT", "timeframe": "2h", "columns": cols, "data": rows, "length": len(rows)}
     return None
 

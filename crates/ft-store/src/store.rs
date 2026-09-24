@@ -296,6 +296,19 @@ impl Store {
         )
     }
 
+    /// Every trade on one pair, open and closed, oldest first.
+    ///
+    /// Used to draw trade markers over the price chart. Filtering in SQL keeps
+    /// a bot with thousands of trades from deserializing all of them to find
+    /// the handful on the pair being viewed.
+    pub fn trades_for_pair(&self, bot_id: &str, pair: &str) -> Result<Vec<Trade>> {
+        self.query_trades(
+            "SELECT payload FROM trades WHERE bot_id = ?1 AND pair = ?2
+             ORDER BY COALESCE(open_timestamp, 0) ASC",
+            params![bot_id, pair],
+        )
+    }
+
     pub fn closed_trade_count(&self, bot_id: &str) -> Result<u32> {
         self.with(|conn| {
             let count: i64 = conn.query_row(

@@ -456,3 +456,71 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* ---------- price chart ---------- */
+
+:root { --price-line: #2f6df6; --mark-entry: #7b8494; }
+[data-theme="dark"] { --price-line: #5b8def; --mark-entry: #97a1b2; }
+
+.chart--price { padding: 10px 6px 6px; }
+.chart__svg--price { height: 260px; touch-action: pan-y; cursor: grab; }
+.chart__svg--price:active { cursor: grabbing; }
+.chart__line--price { stroke: var(--price-line); stroke-width: 1.8; fill: none; }
+
+/* Entry is a triangle, exit a circle: shape carries identity alongside hue,
+   so the marks stay distinguishable without colour. */
+.mark__entry { fill: var(--mark-entry); stroke: var(--surface); stroke-width: 1.5; }
+.mark__entry--open { fill: var(--profit); }
+.mark__link { stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .85; }
+.mark__link--profit { stroke: var(--profit); }
+.mark__link--loss { stroke: var(--loss); }
+.mark__link--flat { stroke: var(--text-dim); }
+/* A surface ring keeps a marker readable wherever it lands on the line. */
+.mark__exit { stroke: var(--surface); stroke-width: 2; }
+.mark__exit--profit { fill: var(--profit); }
+.mark__exit--loss { fill: var(--loss); }
+.mark__exit--flat { fill: var(--text-dim); }
+
+.chart__pan {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 8px 6px 2px; font-size: 12px;
+}
+.chart__pan-btn {
+  border: 0; border-radius: 8px; padding: 5px 11px;
+  font-size: 12px; font-weight: 600;
+  background: var(--surface-2); color: var(--text);
+}
+.chart__pan-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: 10px 14px;
+  padding: 10px 6px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  font-size: 11px; color: var(--text-dim);
+}
+.legend__item { display: inline-flex; align-items: center; gap: 5px; }
+.legend__mark { display: inline-block; width: 10px; height: 10px; }
+.legend__mark--line { height: 2px; background: var(--price-line); border-radius: 1px; }
+.legend__mark--dot { border-radius: 50%; }
+.legend__mark--dot.legend__mark--profit { background: var(--profit); }
+.legend__mark--dot.legend__mark--loss { background: var(--loss); }
+.legend__mark--up {
+  width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--mark-entry);
+}
+.legend__mark--down {
+  width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 9px solid var(--mark-entry);
+}
+
+.pair-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.pair-select {
+  flex: 1; min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-weight: 600;
+}
