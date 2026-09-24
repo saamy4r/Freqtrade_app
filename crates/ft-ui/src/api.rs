@@ -18,27 +18,40 @@ use ft_types::api::{
 };
 use ft_types::freqtrade::BotConfig;
 
-/// Where the API lives.
-///
-/// Overridable at build time for the `dx serve` dev loop, whose dev server runs
-/// on a different port than `ft-server`. The Android build sets this at startup
-/// instead, because the embedded server binds an OS-chosen port.
-const DEFAULT_BASE: &str = "http://127.0.0.1:3000/api";
+/// Fallback for non-browser builds with nothing else configured: the
+/// standalone dev server.
+const DEV_BASE: &str = "http://127.0.0.1:3000/api";
 
 static BASE: OnceLock<String> = OnceLock::new();
 
 /// Points the client at a specific server. Called once, before anything
 /// renders; ignored afterwards.
+///
+/// The Android build uses this, because its embedded server binds an
+/// OS-chosen port that is not known until startup.
 pub fn set_base_url(url: impl Into<String>) {
     let _ = BASE.set(url.into());
 }
 
+/// Where the API lives.
+///
+/// In a browser this is the page's own origin, which holds for both
+/// deployments: `dx serve` proxies `/api` to the dev server, and the shipped
+/// build is served by `ft-server` itself. Same-origin means no CORS in either
+/// case. `reqwest` needs an absolute URL even on wasm, so the origin is read
+/// rather than left relative.
 pub fn base_url() -> &'static str {
     BASE.get_or_init(|| {
-        option_env!("FT_API_BASE")
-            .unwrap_or(DEFAULT_BASE)
-            .trim_end_matches('/')
-            .to_owned()
+        if let Some(from_env) = option_env!("FT_API_BASE") {
+            return from_env.trim_end_matches('/').to_owned();
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(origin) = web_sys::window().and_then(|w| w.location().origin().ok()) {
+                return format!("{}/api", origin.trim_end_matches('/'));
+            }
+        }
+        DEV_BASE.to_owned()
     })
 }
 

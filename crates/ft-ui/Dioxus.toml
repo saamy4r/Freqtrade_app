@@ -6,6 +6,13 @@ title = "Freqtrade Visualizer"
 # Routes are client-side, so a deep link must fall back to index.html.
 base_path = ""
 
+# Proxy the API through the dev server so the browser sees one origin. Without
+# this the UI on :8080 calling ft-server on :3000 is a cross-origin request,
+# and the dev loop would diverge from the shipped build, where ft-server serves
+# the UI itself.
+[[web.proxy]]
+backend = "http://127.0.0.1:3000/api"
+
 [web.watcher]
 reload_html = true
 
