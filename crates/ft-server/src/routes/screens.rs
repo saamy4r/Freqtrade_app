@@ -163,7 +163,7 @@ async fn load_open_trades(
             store.put_snapshot(bot_id, kind::OPEN_MARK, &())?;
             Ok(fetch::Fetched {
                 value: trades,
-                fetched_at: Some(time::OffsetDateTime::now_utc()),
+                fetched_at: Some(fetch::now()),
                 stale: false,
             })
         }
@@ -240,7 +240,7 @@ async fn sync_closed_trades(
     store.put_snapshot(bot_id, kind::CLOSED_MARK, &())?;
     Ok(fetch::Fetched {
         value: store.closed_trade_count(bot_id)?,
-        fetched_at: Some(time::OffsetDateTime::now_utc()),
+        fetched_at: Some(fetch::now()),
         stale: false,
     })
 }

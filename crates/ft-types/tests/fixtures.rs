@@ -275,3 +275,67 @@ fn force_exit_builds_a_limit_order() {
         serde_json::json!({"tradeid": "42", "ordertype": "limit"}),
     );
 }
+
+/// Every type `ft-store` caches must survive its own serialization.
+///
+/// The store writes `serde_json::to_string(value)` and later reads it back
+/// with `from_str`, so a type that deserializes from Freqtrade's wire format
+/// but serializes to a different one can be written to cache and never read.
+/// That is not hypothetical: `LogsResponse` decodes positional 5-tuples but
+/// serializes `LogEntry` as an object, which made every warm load of the Logs
+/// screen a 500 while the cold load worked perfectly.
+#[test]
+fn cached_types_survive_a_round_trip_through_their_own_serialization() {
+    macro_rules! round_trip {
+        ($name:literal => $t:ty) => {{
+            let from_wire: $t = fixture($name);
+            let stored = serde_json::to_string(&from_wire).expect("serialize for cache");
+            let read_back: $t = serde_json::from_str(&stored).unwrap_or_else(|e| {
+                panic!(
+                    "{} cannot be read back from cache: {e}\nstored: {stored}",
+                    stringify!($t)
+                )
+            });
+            assert_eq!(
+                from_wire,
+                read_back,
+                "{} changed value through a cache round trip",
+                stringify!($t)
+            );
+        }};
+    }
+
+    // Exactly the set ft-store snapshots, plus the trade payloads it stores
+    // per row.
+    round_trip!("show_config" => BotConfig);
+    round_trip!("balance" => Balance);
+    round_trip!("profit" => ProfitSummary);
+    round_trip!("whitelist" => WhitelistResponse);
+    round_trip!("logs" => LogsResponse);
+    round_trip!("status" => Vec<Trade>);
+    round_trip!("trades" => TradesResponse);
+    round_trip!("pair_candles" => PairCandles);
+}
+
+#[test]
+fn log_entries_decode_from_objects_as_well_as_tuples() {
+    // The cached shape, written by our own Serialize impl.
+    let cached = r#"{"log_count":1,"logs":[{
+        "timestamp":"2026-09-24 08:00:01,123","epoch":1789516801.123,
+        "logger":"freqtrade.worker","level":"ERROR","message":"boom"}]}"#;
+    let decoded: LogsResponse = serde_json::from_str(cached).unwrap();
+    assert_eq!(decoded.logs.len(), 1);
+    assert_eq!(decoded.logs[0].message, "boom");
+    assert_eq!(decoded.logs[0].severity(), LogSeverity::Error);
+
+    // A mixture, and a malformed row, must not fail the response.
+    let mixed = r#"{"logs":[
+        ["2026-09-24 08:00:01,123",1789516801.0,"a","INFO","tuple"],
+        {"timestamp":"t","epoch":null,"logger":"b","level":"WARNING","message":"object"},
+        ["too short"],
+        42
+    ]}"#;
+    let decoded: LogsResponse = serde_json::from_str(mixed).unwrap();
+    let messages: Vec<_> = decoded.logs.iter().map(|l| l.message.as_str()).collect();
+    assert_eq!(messages, ["tuple", "object"]);
+}

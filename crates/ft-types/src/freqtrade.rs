@@ -371,32 +371,45 @@ pub struct LogsResponse {
     pub log_count: i64,
 }
 
-/// Decodes the positional log tuples, skipping any row too short to be useful
-/// rather than failing the whole response.
+/// Decodes log entries from either shape they arrive in.
+///
+/// Freqtrade sends positional 5-tuples. But these types are also cached by
+/// `ft-store`, which stores whatever we serialized -- and [`LogEntry`] derives
+/// `Serialize`, so a cached response is an array of *objects*. Accepting only
+/// the tuple form made a cached log response unreadable, which showed up as a
+/// 500 on every warm load of the Logs screen while the cold load worked fine.
+///
+/// Rows too short to be useful are skipped rather than failing the response.
 fn de_log_entries<'de, D>(de: D) -> Result<Vec<LogEntry>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let rows = Option::<Vec<Vec<Value>>>::deserialize(de)?.unwrap_or_default();
+    let rows = Option::<Vec<Value>>::deserialize(de)?.unwrap_or_default();
     Ok(rows
         .into_iter()
-        .filter(|row| row.len() >= 5)
-        .map(|row| {
-            let text = |i: usize| -> String {
-                row.get(i)
-                    .map(|v| match v {
-                        Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .unwrap_or_default()
-            };
-            LogEntry {
-                timestamp: text(0),
-                epoch: row.get(1).and_then(Value::as_f64),
-                logger: text(2),
-                level: text(3),
-                message: text(4),
+        .filter_map(|row| match row {
+            // Our own serialization, read back from cache.
+            Value::Object(_) => serde_json::from_value(row).ok(),
+            // Freqtrade's wire format: [time, epoch, logger, level, message].
+            Value::Array(cells) if cells.len() >= 5 => {
+                let text = |i: usize| -> String {
+                    cells
+                        .get(i)
+                        .map(|v| match v {
+                            Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        })
+                        .unwrap_or_default()
+                };
+                Some(LogEntry {
+                    timestamp: text(0),
+                    epoch: cells.get(1).and_then(Value::as_f64),
+                    logger: text(2),
+                    level: text(3),
+                    message: text(4),
+                })
             }
+            _ => None,
         })
         .collect())
 }
@@ -449,7 +462,15 @@ pub struct PairCandles {
     pub data: Vec<Vec<Value>>,
     #[serde(deserialize_with = "de_i64")]
     pub length: i64,
-    #[serde(default, deserialize_with = "de_timestamp_opt")]
+    /// Deserializes flexibly (Freqtrade's format varies) but serializes as
+    /// RFC 3339 explicitly. `OffsetDateTime`'s default serialization is not
+    /// RFC 3339, so without this the value silently became `None` when read
+    /// back out of the cache.
+    #[serde(
+        default,
+        deserialize_with = "de_timestamp_opt",
+        serialize_with = "time::serde::rfc3339::option::serialize"
+    )]
     pub last_refresh: Option<OffsetDateTime>,
 }
 

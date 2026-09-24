@@ -607,6 +607,50 @@ async fn closed_trades_sync_incrementally_rather_than_refetching() {
 }
 
 #[tokio::test]
+async fn every_screen_can_be_served_twice() {
+    // The second load of each screen reads back what the first one cached, so
+    // this catches any type that serializes differently from how it
+    // deserializes. LogsResponse did exactly that -- it decodes Freqtrade's
+    // positional tuples but serializes LogEntry as an object -- so the Logs
+    // screen 500'd on every warm load while the cold load worked. The
+    // original test only covered /overview, which is why it got through.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let id = add_bot(&h, &server).await;
+
+    let screens = ["overview", "closed", "dashboard", "logs", "pairs", "config"];
+    for screen in screens {
+        let cold = h.get(&format!("/api/bots/{id}/{screen}")).await;
+        assert!(
+            cold.status.is_success(),
+            "cold load of {screen} failed: {} {}",
+            cold.status,
+            String::from_utf8_lossy(&cold.bytes)
+        );
+        let warm = h.get(&format!("/api/bots/{id}/{screen}")).await;
+        assert!(
+            warm.status.is_success(),
+            "warm load of {screen} failed (cache round-trip?): {} {}",
+            warm.status,
+            String::from_utf8_lossy(&warm.bytes)
+        );
+        // Compare the payload, not the envelope: `last_synced` legitimately
+        // differs between a live fetch and the cached copy.
+        let cold_data: serde_json::Value = serde_json::from_slice(&cold.bytes).unwrap();
+        let warm_data: serde_json::Value = serde_json::from_slice(&warm.bytes).unwrap();
+        assert_eq!(
+            cold_data["data"], warm_data["data"],
+            "{screen} returned different data from cache than from the bot"
+        );
+    }
+
+    // Candles take a query parameter, so they are checked separately.
+    let uri = format!("/api/bots/{id}/candles?pair=ETH%2FUSDT%3AUSDT");
+    assert!(h.get(&uri).await.status.is_success());
+    assert!(h.get(&uri).await.status.is_success(), "warm candles failed");
+}
+
+#[tokio::test]
 async fn an_unreachable_bot_still_renders_from_cache() {
     // The offline path: the screen shows yesterday's numbers with a banner,
     // rather than the full-screen error the Flutter app fell back to.

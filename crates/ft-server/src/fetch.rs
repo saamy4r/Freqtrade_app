@@ -40,6 +40,19 @@ pub mod ttl {
     pub const LOGS: Duration = Duration::from_secs(5);
 }
 
+/// The current time at whole-second precision.
+///
+/// The store persists `fetched_at` as a unix timestamp in seconds, so a live
+/// fetch stamped with nanoseconds would report a more precise `last_synced`
+/// than the same data reports once it comes back from cache. Truncating keeps
+/// the field stable across that boundary rather than claiming precision we
+/// cannot preserve.
+pub fn now() -> OffsetDateTime {
+    OffsetDateTime::now_utc()
+        .replace_nanosecond(0)
+        .unwrap_or_else(|_| OffsetDateTime::now_utc())
+}
+
 /// A value plus where it came from.
 pub struct Fetched<T> {
     pub value: T,
@@ -96,7 +109,7 @@ where
             state.store().put_snapshot(bot_id, kind, &value)?;
             Ok(Fetched {
                 value,
-                fetched_at: Some(OffsetDateTime::now_utc()),
+                fetched_at: Some(now()),
                 stale: false,
             })
         }
@@ -132,7 +145,7 @@ where
     match fetch.await {
         Ok(value) => Ok(Fetched {
             value,
-            fetched_at: Some(OffsetDateTime::now_utc()),
+            fetched_at: Some(now()),
             stale: false,
         }),
         Err(e) if e.is_offline() => match cached()? {
