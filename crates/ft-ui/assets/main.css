@@ -524,3 +524,93 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: var(--surface); color: var(--text);
   font: inherit; font-weight: 600;
 }
+
+/* ---------- terminal ---------- */
+
+:root {
+  --term-bg: #16181c;
+  --term-fg: #d7dbe0;
+  --term-dim: #7d8794;
+  --term-info: #6aa9ff;
+  --term-debug: #8b95a3;
+  --term-warn: #ffb020;
+  --term-error: #ff6b6f;
+}
+
+.term {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--term-bg);
+}
+.term__bar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px;
+  background: #1d2026;
+  border-bottom: 1px solid #272b32;
+  font-size: 12px; color: var(--term-dim);
+}
+.term__dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #2ecc71; flex: none;
+}
+.term__count { flex: 1; }
+.term__btn {
+  border: 0; border-radius: 7px;
+  padding: 4px 9px; font-size: 11px; font-weight: 600;
+  background: #272b32; color: var(--term-fg);
+}
+.term__btn:hover { background: #333842; }
+
+.term__view {
+  height: 62vh;
+  min-height: 300px;
+  overflow: auto;
+  /* Terminal semantics: lines do not wrap, they scroll. That also makes every
+     row the same height, which is what lets the browser skip the off-screen
+     ones below. */
+  padding: 8px 0;
+}
+.term__empty { padding: 30px; text-align: center; color: var(--term-dim); font-size: 13px; }
+
+.term__row {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 2px 12px;
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.5;
+  color: var(--term-fg);
+  /* `pre-wrap`, not `pre`: it keeps the newlines inside a Python traceback --
+     which arrives as one log entry -- while still wrapping a long line into
+     the viewport. Sizing rows to their content would give horizontal scrolling
+     instead, but that cannot work here: `content-visibility` skips layout for
+     off-screen rows, so their width never reaches the scroll container, and
+     sideways scrolling through a log on a phone is miserable regardless.
+     `overflow-wrap: anywhere` because the long tokens here are unbroken
+     identifiers and paths with nowhere to wrap politely. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Native virtualization: the browser skips layout and paint for rows outside
+     the viewport. The legacy screen built all 500 rows on every render.
+     `auto` in the intrinsic size lets a wrapped row remember its real height. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 22px;
+}
+.term__row--warning { background: #ffb02014; }
+.term__row--error { background: #ff6b6f18; }
+
+.term__time { color: var(--term-dim); flex: none; font-variant-numeric: tabular-nums; }
+.term__level {
+  flex: none; min-width: 62px;
+  padding: 0 5px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: .03em;
+  border: 1px solid currentColor;
+  text-align: center;
+}
+.term__level--info { color: var(--term-info); }
+.term__level--debug { color: var(--term-debug); }
+.term__level--warning { color: var(--term-warn); }
+.term__level--error { color: var(--term-error); }
+/* `min-width: 0` is what actually permits the wrap: a flex item will not
+   shrink below its content width without it, so the text would overflow the
+   row and be clipped no matter what `overflow-wrap` says. */
+.term__msg { flex: 1; min-width: 0; }

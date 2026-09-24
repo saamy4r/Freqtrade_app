@@ -118,6 +118,35 @@ pub fn datetime(millis: i64) -> String {
         .unwrap_or_default()
 }
 
+/// Epoch milliseconds as a 24-hour clock time, `14:30:05`.
+///
+/// Logs are read as a sequence of moments within a session, so the date is
+/// noise; the legacy screen got this shape right by slicing characters 11..19
+/// out of the timestamp string, which only worked while the format held.
+#[cfg(target_arch = "wasm32")]
+pub fn clock(millis: i64) -> String {
+    let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(millis as f64));
+    let options = js_sys::Object::new();
+    for (key, value) in [
+        ("hour", "2-digit"),
+        ("minute", "2-digit"),
+        ("second", "2-digit"),
+    ] {
+        let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
+    }
+    let _ = js_sys::Reflect::set(&options, &"hour12".into(), &wasm_bindgen::JsValue::FALSE);
+    date.to_locale_time_string_with_options("default", &options)
+        .into()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn clock(millis: i64) -> String {
+    use time::OffsetDateTime;
+    OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000)
+        .map(|d| format!("{:02}:{:02}:{:02}", d.hour(), d.minute(), d.second()))
+        .unwrap_or_default()
+}
+
 /// How long ago, for the offline banner: "3m ago", "just now".
 pub fn ago(seconds: i64) -> String {
     match seconds {
@@ -170,6 +199,13 @@ mod tests {
         assert_eq!(Tone::of(-1.0), Tone::Loss);
         assert_eq!(Tone::of(0.0), Tone::Flat);
         assert_eq!(Tone::of(1.0).class(), "profit");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn clock_shows_only_the_time_of_day() {
+        // 1970-01-01T01:02:03Z
+        assert_eq!(clock(3_723_000), "01:02:03");
     }
 
     #[test]

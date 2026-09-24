@@ -35,6 +35,28 @@ for i in range(1, N + 1):
 TOTAL = round(sum(t["profit_abs"] for t in TRADES), 4)
 WINS = sum(1 for t in TRADES if t["profit_abs"] > 0)
 
+# A realistic log buffer: mostly INFO, occasional WARNING, rare ERROR, plus
+# DEBUG chatter -- enough lines to exercise the virtualized list.
+LOG_SOURCES = [
+    ("INFO", "freqtrade.worker", "Bot heartbeat. PID=1234, version='2026.4', state='RUNNING'"),
+    ("INFO", "freqtrade.freqtradebot", "Analyzing pair {pair}"),
+    ("INFO", "freqtrade.exchange", "Fetched 300 candles for {pair}, 2h"),
+    ("DEBUG", "freqtrade.strategy", "populate_indicators {pair} took 0.0{n}s"),
+    ("DEBUG", "freqtrade.persistence", "Committing session for trade {n}"),
+    ("WARNING", "freqtrade.exchange", "Could not load markets for {pair}, retrying in 5s"),
+    ("WARNING", "freqtrade.rpc", "Rate limit reached, backing off"),
+    ("ERROR", "freqtrade.exchange", "Error fetching ticker for {pair}: timeout"),
+    ("CRITICAL", "freqtrade.worker", "Unhandled exception in worker loop"),
+]
+WEIGHTS = [14, 20, 12, 18, 14, 6, 4, 3, 1]
+LOGS = []
+for i in range(500):
+    level, logger, template = random.choices(LOG_SOURCES, weights=WEIGHTS, k=1)[0]
+    epoch = 1789516800 + i * 7
+    stamp = f"2026-09-24 {8 + (i * 7) // 3600:02d}:{((i * 7) // 60) % 60:02d}:{(i * 7) % 60:02d},{i % 1000:03d}"
+    message = template.format(pair=random.choice(["ETH/USDT:USDT", "SOL/USDT:USDT", "BTC/USDT:USDT"]), n=i)
+    LOGS.append([stamp, epoch + 0.5, logger, level, message])
+
 OPEN = [{
     "trade_id": N + 1, "pair": "ETH/USDT:USDT", "is_open": True, "is_short": False,
     "stake_amount": 100.0, "open_rate": 2500.0, "current_rate": 2561.6,
@@ -70,9 +92,8 @@ def route(path, query):
     if path.endswith("/whitelist"):
         return {"whitelist": ["ETH/USDT:USDT", "SOL/USDT:USDT", "BTC/USDT:USDT"], "length": 3}
     if path.endswith("/logs"):
-        return {"log_count": 3, "logs": [
-            [f"2026-09-24 08:00:0{i}", 1789516800 + i, "freqtrade.worker",
-             ["INFO", "WARNING", "ERROR"][i % 3], f"mock log line {i}"] for i in range(3)]}
+        limit = int(query.get("limit", ["500"])[0])
+        return {"log_count": len(LOGS), "logs": LOGS[-limit:]}
     if path.endswith("/pair_candles"):
         cols = ["date", "open", "high", "low", "close", "volume", "__date_ts"]
         rows = []
