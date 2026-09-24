@@ -24,6 +24,8 @@ use axum::routing::{delete, get, post, put};
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
 use ft_store::Store;
@@ -39,6 +41,20 @@ pub use state::AppState;
 /// origin than this one. It is off in the shipped app, where the UI is served
 /// from this same origin.
 pub fn router(store: Arc<Store>, dev_cors: bool) -> Router {
+    router_with_ui(store, dev_cors, None)
+}
+
+/// As [`router`], but also serves a built UI bundle.
+///
+/// This is how the app actually ships: one origin serving both the API and the
+/// page, which is why it is worth using in development too. Routing is
+/// client-side, so anything not matching a file falls back to `index.html` —
+/// without that, a reload on `/dashboard` would 404.
+pub fn router_with_ui(
+    store: Arc<Store>,
+    dev_cors: bool,
+    ui_dir: Option<std::path::PathBuf>,
+) -> Router {
     let state = AppState::new(store);
 
     let api = Router::new()
@@ -61,10 +77,25 @@ pub fn router(store: Arc<Store>, dev_cors: bool) -> Router {
         )
         .with_state(state);
 
-    let mut app = Router::new()
-        .nest("/api", api)
-        .layer(TraceLayer::new_for_http());
+    let mut app = Router::new().nest("/api", api);
 
+    if let Some(dir) = ui_dir {
+        let index = dir.join("index.html");
+        // The wasm bundle has a stable filename, so a browser will cache it
+        // indefinitely and keep running an old build after a rebuild -- which
+        // is extremely confusing, because the page looks fine and simply
+        // behaves like the code you are no longer running. The server is
+        // either on loopback (Android) or localhost (development), so there is
+        // nothing to gain from caching here anyway.
+        app = app.fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(&index)));
+        app = app.layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store, must-revalidate"),
+        ));
+        tracing::info!(dir = %dir.display(), "serving UI");
+    }
+
+    app = app.layer(TraceLayer::new_for_http());
     if dev_cors {
         app = app.layer(CorsLayer::very_permissive());
     }
@@ -98,9 +129,19 @@ pub async fn spawn_on(
     addr: SocketAddr,
     dev_cors: bool,
 ) -> std::io::Result<Running> {
+    spawn_on_with_ui(store, addr, dev_cors, None).await
+}
+
+/// As [`spawn_on`], additionally serving a built UI bundle.
+pub async fn spawn_on_with_ui(
+    store: Arc<Store>,
+    addr: SocketAddr,
+    dev_cors: bool,
+    ui_dir: Option<std::path::PathBuf>,
+) -> std::io::Result<Running> {
     let listener = TcpListener::bind(addr).await?;
     let port = listener.local_addr()?.port();
-    let app = router(store, dev_cors);
+    let app = router_with_ui(store, dev_cors, ui_dir);
 
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {

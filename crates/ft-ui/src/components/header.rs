@@ -8,6 +8,10 @@ use crate::state::{App, Theme};
 /// Which badge the header shows.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
+    /// No bot selected yet, so there is nothing to report. Distinct from
+    /// `Connecting`: folding the two together left a spinner running forever
+    /// on the empty-state screen.
+    None,
     Connecting,
     Dry,
     Live,
@@ -21,13 +25,25 @@ pub fn Header() -> Element {
 
     // Re-runs whenever the active bot changes. Loading the config is also how
     // we learn whether the bot is reachable at all.
-    let config = use_resource(move || async move {
-        let id = active.read().clone()?;
-        Some(api::config(&id, false).await)
+    //
+    // The signal is read in the closure body, NOT inside the async block.
+    // Reading it inside the future makes the resource subscribe to something
+    // that changes as a result of its own completion, so it restarts forever —
+    // a livelock that presents as the browser tab hanging on the first
+    // re-render, with no panic and nothing in the console.
+    let config = use_resource(move || {
+        let id = active.read().clone();
+        async move {
+            let id = id?;
+            Some(api::config(&id, false).await)
+        }
     });
 
     let mode = match &*config.read_unchecked() {
-        None | Some(None) => Mode::Connecting,
+        // The resource has not resolved yet.
+        None => Mode::Connecting,
+        // It resolved, and there was no active bot to ask about.
+        Some(None) => Mode::None,
         Some(Some(Ok(envelope))) if envelope.stale => Mode::Offline,
         Some(Some(Ok(envelope))) => {
             if envelope.data.dry_run {
@@ -49,6 +65,7 @@ pub fn Header() -> Element {
         header { class: "header",
             span { class: "header__name", "{name}" }
             match mode {
+                Mode::None => rsx! {},
                 Mode::Connecting => rsx! { span { class: "spinner muted" } },
                 Mode::Dry => rsx! { span { class: "badge badge--dry", "DRY" } },
                 Mode::Live => rsx! { span { class: "badge badge--live", "LIVE" } },

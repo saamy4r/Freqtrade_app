@@ -23,7 +23,10 @@
   --header-h: 56px;
 }
 
-:root[data-theme="dark"] {
+/* Attribute selector, not `:root[...]`: the theme attribute lives on the shell
+   wrapper because Dioxus renders into <body> and cannot set it on <html>.
+   `:root` only ever matches <html>, so the original selector never fired. */
+[data-theme="dark"] {
   --bg: #0f1114;
   --surface: #181b20;
   --surface-2: #21252c;
@@ -55,7 +58,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ---------- shell ---------- */
 
-.shell { min-height: 100vh; padding-bottom: var(--nav-h); }
+/* The shell paints the background rather than <body>, since that is where the
+   theme variables are defined. */
+.shell {
+  min-height: 100vh;
+  padding-bottom: var(--nav-h);
+  background: var(--bg);
+  color: var(--text);
+}
 
 .header {
   position: sticky; top: 0; z-index: 20;

@@ -15,7 +15,3 @@ backend = "http://127.0.0.1:3000/api"
 
 [web.watcher]
 reload_html = true
-
-[web.resource]
-style = []
-script = []

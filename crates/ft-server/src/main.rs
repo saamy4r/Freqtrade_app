@@ -39,8 +39,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(path = %db_path.display(), "opening store");
     let store = Arc::new(Store::open(&db_path, &FileKey::beside(&db_path))?);
 
+    // Serving the UI from this same origin is how the app ships; doing it in
+    // development too removes a class of differences between the two.
+    let ui_dir = args
+        .iter()
+        .position(|a| a == "--ui")
+        .and_then(|i| args.get(i + 1).cloned())
+        .map(std::path::PathBuf::from);
+
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
-    let running = ft_server::spawn_on(store, addr, dev).await?;
+    let running = ft_server::spawn_on_with_ui(store, addr, dev, ui_dir).await?;
     if dev {
         tracing::warn!("--dev: CORS is permissive; do not expose this beyond localhost");
     }

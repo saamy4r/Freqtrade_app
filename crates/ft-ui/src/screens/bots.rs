@@ -22,11 +22,16 @@ pub fn Bots() -> Element {
     let mut adding = use_signal(|| false);
     let mut confirm_delete = use_signal(|| None::<BotSummary>);
 
-    // Pinged in parallel on mount. One bot being down is ordinary, so this
+    // Pinged when the bot list changes. One bot being down is ordinary, so this
     // never surfaces an error -- it just colours a dot.
-    let bots_snapshot = app.bots.read().clone();
+    //
+    // The signal is read in the closure body so it registers as a dependency.
+    // Capturing a clone taken outside would make this run once and never
+    // refresh after a bot is added or removed. Note it must NOT be read inside
+    // the async block either: that subscribes the resource to something its
+    // own completion changes, and it restarts forever.
     let liveness = use_resource(move || {
-        let ids: Vec<String> = bots_snapshot.iter().map(|b| b.id.clone()).collect();
+        let ids: Vec<String> = app.bots.read().iter().map(|b| b.id.clone()).collect();
         async move {
             let mut out = Vec::with_capacity(ids.len());
             for id in ids {
@@ -63,7 +68,10 @@ pub fn Bots() -> Element {
                     kind: ErrorKind::Internal,
                     message,
                     on_retry: move |_| {
-                        spawn(async move { App::get().reload_bots(None).await });
+                        spawn(async move {
+                            let mut app = app;
+                            app.reload_bots(None).await;
+                        });
                     },
                 }
             } else if loading {
@@ -105,7 +113,7 @@ pub fn Bots() -> Element {
                 on_added: move |bot: BotSummary| {
                     adding.set(false);
                     spawn(async move {
-                        let mut app = App::get();
+                        let mut app = app;
                         app.reload_bots(Some(bot.id.clone())).await;
                         app.select(bot.id);
                     });
@@ -120,8 +128,9 @@ pub fn Bots() -> Element {
                 on_confirm: move |id: String| {
                     confirm_delete.set(None);
                     spawn(async move {
+                        let mut app = app;
                         let _ = api::delete_bot(&id).await;
-                        App::get().reload_bots(None).await;
+                        app.reload_bots(None).await;
                     });
                 },
             }
@@ -144,9 +153,12 @@ fn BotList(
 ) -> Element {
     let mut dragging = use_signal(|| None::<usize>);
     let mut over = use_signal(|| None::<usize>);
+    // Captured here, in the component body. `App::get` wraps `use_context`,
+    // which is a hook: calling it from inside an event handler runs a hook
+    // outside render and corrupts hook ordering.
+    let mut app = App::get();
 
-    let commit = move |from: usize, to: usize| {
-        let mut app = App::get();
+    let mut commit = move |from: usize, to: usize| {
         let mut ids: Vec<String> = app.bots.peek().iter().map(|b| b.id.clone()).collect();
         if from >= ids.len() || to > ids.len() || from == to {
             return;
@@ -164,7 +176,7 @@ fn BotList(
 
         spawn(async move {
             if let Ok(saved) = api::reorder_bots(ids).await {
-                App::get().bots.set(saved);
+                app.bots.set(saved);
             }
         });
     };

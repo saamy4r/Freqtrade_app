@@ -1,43 +1,46 @@
 #!/usr/bin/env bash
-# Development loop: API server plus the web UI with hot reload.
+# Development loop: build the UI, then serve it and the API from one origin.
 #
-#   scripts/dev.sh
+#   scripts/dev.sh            # debug build, fast
+#   scripts/dev.sh --release  # what actually ships
 #
-# Starts ft-server on :3000, then `dx serve` on :8080 with /api proxied to it,
-# so the browser sees one origin -- the same arrangement as the shipped build,
-# where ft-server serves the UI itself.
+# Deliberately does NOT use `dx serve`. Its hot-reload keeps a stale wasm module
+# alive in the browser after a rebuild, which costs hours: the page looks
+# correct and simply behaves like code you are no longer running. Serving the
+# built bundle from ft-server is also exactly how the app ships, so the dev loop
+# and the product share one path.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-API_PORT="${API_PORT:-3000}"
-UI_PORT="${UI_PORT:-8080}"
-DB="${FT_DB:-$HOME/.local/share/freqtrade-visualizer/ft.db}"
-
-if ! command -v dx >/dev/null; then
-  echo "dx is not installed. Run: cargo install dioxus-cli@0.7.10 --locked" >&2
-  exit 1
+PROFILE="debug"
+DX_FLAGS=()
+if [[ "${1:-}" == "--release" ]]; then
+  PROFILE="release"
+  DX_FLAGS=(--release)
 fi
 
-echo "==> building ft-server"
+API_PORT="${API_PORT:-3000}"
+DB="${FT_DB:-$HOME/.local/share/freqtrade-visualizer/ft.db}"
+
+command -v dx >/dev/null || {
+  echo "dx missing. cargo install dioxus-cli@0.7.10 --locked" >&2; exit 1;
+}
+
+echo "==> building UI ($PROFILE)"
+dx build --package ft-ui --platform web "${DX_FLAGS[@]}"
+
+BUNDLE="$ROOT/target/dx/ft-ui/$PROFILE/web/public"
+[[ -d "$BUNDLE" ]] || { echo "no bundle at $BUNDLE" >&2; exit 1; }
+
+echo "==> building server"
 cargo build -q -p ft-server
 
-echo "==> ft-server on :$API_PORT (db $DB)"
+echo
+echo "    http://localhost:$API_PORT"
+echo
+# A debug bundle uses stable filenames, so the server sends no-store to stop the
+# browser pinning an old module. Release builds are content-hashed already.
 RUST_LOG="${RUST_LOG:-ft_server=debug,ft_client=info,tower_http=warn}" \
-  "$ROOT/target/debug/ft-server" --dev --port "$API_PORT" --db "$DB" &
-SERVER=$!
-trap 'kill "$SERVER" 2>/dev/null || true' EXIT
-
-for _ in $(seq 60); do
-  curl -fsS "http://127.0.0.1:$API_PORT/api/health" >/dev/null 2>&1 && break
-  sleep 0.1
-done
-
-echo "==> dx serve on :$UI_PORT"
-echo
-echo "    open http://localhost:$UI_PORT"
-echo
-# No FT_API_BASE: Dioxus.toml proxies /api to the server above, so the browser
-# sees a single origin -- the same arrangement as the shipped build.
-dx serve --package ft-ui --platform web --port "$UI_PORT"
+  exec "$ROOT/target/debug/ft-server" --port "$API_PORT" --db "$DB" --ui "$BUNDLE"

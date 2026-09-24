@@ -47,3 +47,40 @@ permits cleartext to private address ranges.
   cleanly with the NDK but does mean a C compiler is required on the build host.
 - Crypto for credentials is `aes-gcm` (pure Rust) specifically to avoid pulling OpenSSL into
   the Android build; do not switch to SQLCipher.
+
+## Browser caching of the wasm bundle
+
+A debug `dx build` emits `wasm/ft-ui_bg.wasm` — a stable filename. A browser
+will cache that indefinitely and keep executing the previous build after a
+rebuild, which is a uniquely expensive failure: the page renders fine and
+simply behaves like code you are no longer running, so every experiment you run
+against it is meaningless.
+
+Two mitigations, both in place:
+
+- `ft-server` sends `Cache-Control: no-store, must-revalidate` for everything it
+  serves from `--ui`. It only ever serves loopback or localhost, so there is
+  nothing to gain from caching.
+- Release builds are content-hashed (`assets/ft-ui_bg-dxh5e48….wasm`), so the
+  problem cannot occur there at all.
+
+`dx serve`'s hot-reload has the same hazard plus its own: a non-hot-reloadable
+change leaves an "app is being rebuilt" overlay while still serving the old
+module. `scripts/dev.sh` avoids it entirely by building the bundle and serving
+it from `ft-server`, which is also how the app ships.
+
+A related note for diagnosing UI problems: a CDP screenshot timing out
+("renderer may be frozen") is not on its own evidence of a hang. During this
+work the page executed injected JavaScript and responded correctly while
+screenshots timed out. Probe with `javascript_tool` before concluding anything
+is stuck.
+
+## Dioxus resource dependencies
+
+`use_resource`'s dependencies are the signals read while the *closure* runs, not
+inside the future it returns. Two rules follow, and both were violated in M5:
+
+- Read signals in the closure body. A dependency captured as a plain clone from
+  outside never re-triggers the resource.
+- Never read a signal inside the `async` block if the resource's own completion
+  can change it. That subscribes the resource to itself and it restarts forever.

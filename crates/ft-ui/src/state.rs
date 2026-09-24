@@ -71,6 +71,13 @@ impl App {
         app
     }
 
+    /// Reads the shared state out of context.
+    ///
+    /// This is a hook. It must be called from a component body, never from an
+    /// event handler or a spawned future — doing so runs a hook outside render
+    /// and corrupts hook ordering, which manifests as the renderer locking up
+    /// rather than as a clean panic. `App` is `Copy`, so capture it once in the
+    /// component body and move it into handlers instead.
     pub fn get() -> Self {
         use_context::<App>()
     }
