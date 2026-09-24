@@ -24,8 +24,16 @@ fi
 API_PORT="${API_PORT:-3000}"
 DB="${FT_DB:-$HOME/.local/share/freqtrade-visualizer/ft.db}"
 
+# Arch's rustup package puts cargo/rustc shims in /usr/bin, so those work
+# without ~/.cargo/bin on PATH -- but anything installed by `cargo install`
+# lands there and is invisible. Add it ourselves rather than depending on the
+# user's shell configuration.
+export PATH="$HOME/.cargo/bin:$PATH"
+
 command -v dx >/dev/null || {
-  echo "dx missing. cargo install dioxus-cli@0.7.10 --locked" >&2; exit 1;
+  echo "dx not found on PATH or in ~/.cargo/bin." >&2
+  echo "Install it with: cargo install dioxus-cli@0.7.10 --locked" >&2
+  exit 1
 }
 
 echo "==> building UI ($PROFILE)"
