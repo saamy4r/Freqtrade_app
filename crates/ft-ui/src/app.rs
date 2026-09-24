@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use crate::components::{BottomNav, Header};
-use crate::screens::{Bots, ClosedTrades, OpenTrades, Placeholder};
+use crate::screens::{Bots, ClosedTrades, Dashboard, OpenTrades, Placeholder};
 use crate::state::App as AppState;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -62,11 +62,6 @@ fn Shell() -> Element {
         }
         BottomNav {}
     }
-}
-
-#[component]
-fn Dashboard() -> Element {
-    rsx! { Placeholder { title: "Dashboard", milestone: "M7" } }
 }
 
 #[component]

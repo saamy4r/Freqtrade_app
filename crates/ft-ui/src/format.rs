@@ -66,6 +66,12 @@ pub fn percent(ratio: f64) -> String {
     format!("{sign}{:.2}%", ratio * 100.0)
 }
 
+/// A ratio as an unsigned percentage, for quantities that have no direction —
+/// a drawdown or a win rate is a magnitude, not a gain.
+pub fn magnitude_percent(ratio: f64) -> String {
+    format!("{:.2}%", ratio.abs() * 100.0)
+}
+
 /// A price, with enough decimals to be useful for cheap assets.
 ///
 /// A fixed two decimals would render ADA at 0.35 as `0.35` but SHIB as `0.00`.
@@ -150,6 +156,12 @@ mod tests {
         assert_eq!(price(2500.5), "2500.50");
         assert_eq!(price(147.0), "147.0000");
         assert_eq!(price(0.0), "0");
+    }
+
+    #[test]
+    fn magnitudes_carry_no_sign() {
+        assert_eq!(magnitude_percent(0.0863), "8.63%");
+        assert_eq!(magnitude_percent(-0.0863), "8.63%");
     }
 
     #[test]
