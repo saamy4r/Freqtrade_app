@@ -1,0 +1,31 @@
+[package]
+name = "ft-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "ft_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ft-server"
+path = "src/main.rs"
+
+[dependencies]
+ft-types.workspace = true
+ft-client.workspace = true
+ft-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+time.workspace = true
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-http = { version = "0.7", features = ["cors", "fs", "trace"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+wiremock = "0.6"

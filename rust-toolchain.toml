@@ -1,0 +1,5 @@
+# Honoured by rustup only. The Arch pacman `rust` package ignores this file, which is
+# fine for M0-M10; rustup becomes a hard requirement at M11 for the Android targets.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

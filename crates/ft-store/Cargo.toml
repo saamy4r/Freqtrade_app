@@ -1,0 +1,20 @@
+[package]
+name = "ft-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ft-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+time.workspace = true
+uuid.workspace = true
+rusqlite = { version = "0.40", features = ["bundled", "time"] }
+aes-gcm = "0.11"
+rand = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

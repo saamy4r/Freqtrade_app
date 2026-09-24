@@ -1,38 +1,20 @@
-# General
-build/
-.dart_tool/
-.idea/
-*.iml
-*.md
-*.packages
+# Rust
+/target/
+**/*.rs.bk
 
+# Dioxus
+/dist/
+.dioxus/
+
+# Android (from M11)
+/crates/ft-ui/gen/
+local.properties
+key.properties
+*.keystore
+*.jks
+
+# Local dev
+.env
+*.db
+*.db-journal
 .claude
-# Android
-android/local.properties
-android/key.properties
-android/.gradle/
-android/app/build/
-
-# iOS
-ios/Pods/
-ios/Podfile.lock
-ios/.symlinks/
-ios/Runner/GeneratedPluginRegistrant.h
-ios/Runner/GeneratedPluginRegistrant.m
-ios/Runner.xcworkspace/
-
-# macOS
-macos/Pods/
-macos/Podfile.lock
-macos/.symlinks/
-macos/Runner.xcworkspace/
-
-# Linux
-linux/build/
-linux/.config
-
-# Windows
-windows/build/
-windows/runner/Debug/
-windows/runner/Release/
-windows/runner/Profile/
