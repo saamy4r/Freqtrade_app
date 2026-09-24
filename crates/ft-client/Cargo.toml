@@ -13,8 +13,9 @@ tracing.workspace = true
 tokio.workspace = true
 base64 = "0.23"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-reqwest = { version = "0.13", default-features = false, features = ["json", "charset", "http2", "rustls-no-provider", "webpki-roots"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "charset", "http2", "rustls-no-provider", "webpki-roots"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { workspace = true }
 wiremock = "0.6"
