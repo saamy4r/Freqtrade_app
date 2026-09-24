@@ -13,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::flex::{de_timestamp_opt, null_to_default, parse_timestamp, StakeAmount};
+use crate::flex::{
+    coerce_f64, coerce_i64, de_i64, de_i64_opt, de_timestamp_opt, de_u32, null_to_default,
+    parse_timestamp, StakeAmount,
+};
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -64,10 +67,10 @@ pub struct BotConfig {
     pub stake_currency: String,
     pub stake_amount: StakeAmount,
     pub available_capital: Option<f64>,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_u32")]
     pub stake_currency_decimals: u32,
     /// `-1` means unlimited; see [`BotConfig::max_open_trades_display`].
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub max_open_trades: i64,
     /// A ratio, e.g. `-0.1` for -10%. `-1.0` is Freqtrade's "disabled" sentinel.
     #[serde(deserialize_with = "null_to_default")]
@@ -118,6 +121,7 @@ impl BotConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Trade {
+    #[serde(deserialize_with = "de_i64")]
     pub trade_id: i64,
     pub pair: String,
     pub base_currency: Option<String>,
@@ -146,10 +150,13 @@ pub struct Trade {
     pub open_date: Option<String>,
     pub close_date: Option<String>,
     /// Epoch milliseconds. Preferred over [`Trade::open_date`] for ordering.
+    #[serde(default, deserialize_with = "de_i64_opt")]
     pub open_timestamp: Option<i64>,
+    #[serde(default, deserialize_with = "de_i64_opt")]
     pub close_timestamp: Option<i64>,
     pub exit_reason: Option<String>,
     pub strategy: Option<String>,
+    #[serde(default, deserialize_with = "de_i64_opt")]
     pub timeframe: Option<i64>,
     pub leverage: Option<f64>,
     pub stop_loss_abs: Option<f64>,
@@ -191,11 +198,11 @@ fn timestamp_or_string(millis: Option<i64>, text: Option<&str>) -> Option<Offset
 #[serde(default)]
 pub struct TradesResponse {
     pub trades: Vec<Trade>,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub trades_count: i64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub offset: i64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub total_trades: i64,
 }
 
@@ -219,18 +226,18 @@ pub struct ProfitSummary {
     pub profit_all_coin: f64,
     #[serde(deserialize_with = "null_to_default")]
     pub profit_all_percent: f64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub trade_count: i64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub closed_trade_count: i64,
     /// Human string such as `2:14:33`; Freqtrade formats it, we pass it through.
     pub avg_duration: Option<String>,
     pub best_pair: Option<String>,
     #[serde(deserialize_with = "null_to_default")]
     pub best_pair_profit_ratio: f64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub winning_trades: i64,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub losing_trades: i64,
     #[serde(deserialize_with = "null_to_default")]
     pub profit_factor: f64,
@@ -244,7 +251,9 @@ pub struct ProfitSummary {
     pub starting_capital: f64,
     /// Not always present on `/profit`; the Dashboard falls back to `/balance`.
     pub stake_currency: Option<String>,
+    #[serde(default, deserialize_with = "de_i64_opt")]
     pub first_trade_timestamp: Option<i64>,
+    #[serde(default, deserialize_with = "de_i64_opt")]
     pub latest_trade_timestamp: Option<i64>,
 }
 
@@ -358,7 +367,7 @@ pub enum LogSeverity {
 pub struct LogsResponse {
     #[serde(deserialize_with = "de_log_entries")]
     pub logs: Vec<LogEntry>,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub log_count: i64,
 }
 
@@ -401,7 +410,7 @@ where
 #[serde(default)]
 pub struct WhitelistResponse {
     pub whitelist: Vec<String>,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub length: i64,
     pub method: Vec<String>,
 }
@@ -438,7 +447,7 @@ pub struct PairCandles {
     pub strategy: String,
     pub columns: Vec<String>,
     pub data: Vec<Vec<Value>>,
-    #[serde(deserialize_with = "null_to_default")]
+    #[serde(deserialize_with = "de_i64")]
     pub length: i64,
     #[serde(default, deserialize_with = "de_timestamp_opt")]
     pub last_refresh: Option<OffsetDateTime>,
@@ -470,13 +479,13 @@ impl PairCandles {
             .iter()
             .filter_map(|row| {
                 let at = |idx: Option<usize>| idx.and_then(|i| row.get(i));
-                let time = at(ts_idx).and_then(Value::as_i64).or_else(|| {
+                let time = at(ts_idx).and_then(coerce_i64).or_else(|| {
                     at(date_idx)
                         .and_then(parse_timestamp)
                         .map(|dt| (dt.unix_timestamp_nanos() / 1_000_000) as i64)
                 })?;
-                let close = at(close_idx).and_then(Value::as_f64).unwrap_or_default();
-                let num = |idx: Option<usize>| at(idx).and_then(Value::as_f64);
+                let close = at(close_idx).and_then(coerce_f64).unwrap_or_default();
+                let num = |idx: Option<usize>| at(idx).and_then(coerce_f64);
                 Some(Candle {
                     time,
                     open: num(open_idx).unwrap_or(close),

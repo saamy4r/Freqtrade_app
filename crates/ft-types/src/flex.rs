@@ -24,6 +24,63 @@ where
     Ok(Option::<T>::deserialize(de)?.unwrap_or_default())
 }
 
+/// Reads an integer that arrived as something other than a JSON integer.
+///
+/// Freqtrade echoes config values back through Python, so whether
+/// `max_open_trades` serializes as `2` or `2.0` depends on how the user wrote
+/// it in `config.json`. Observed live on Freqtrade 2026.4. Since any
+/// config-derived integer can take either form, every integer field coerces
+/// rather than the one field that happened to bite us.
+pub fn coerce_i64(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f.trunc() as i64)),
+        Value::String(s) => {
+            let s = s.trim();
+            s.parse::<i64>()
+                .ok()
+                .or_else(|| s.parse::<f64>().ok().map(|f| f.trunc() as i64))
+        }
+        _ => None,
+    }
+}
+
+/// [`coerce_i64`]'s counterpart for floats, which also accepts a numeric string.
+pub fn coerce_f64(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse().ok(),
+        _ => None,
+    }
+}
+
+/// Serde adapter: integer field, absent/null/float/string tolerant.
+pub fn de_i64<'de, D>(de: D) -> Result<i64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(de_i64_opt(de)?.unwrap_or_default())
+}
+
+/// Serde adapter: nullable integer field, same tolerance.
+pub fn de_i64_opt<'de, D>(de: D) -> Result<Option<i64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<Value>::deserialize(de)?
+        .as_ref()
+        .and_then(coerce_i64))
+}
+
+/// Serde adapter for an unsigned field, clamped rather than wrapped.
+pub fn de_u32<'de, D>(de: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(de_i64_opt(de)?
+        .unwrap_or_default()
+        .clamp(0, i64::from(u32::MAX)) as u32)
+}
+
 /// A stake amount, which Freqtrade reports either as a number or as the literal
 /// string `"unlimited"`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -193,6 +250,46 @@ mod tests {
         let quoted: StakeAmount = serde_json::from_str("\"25\"").unwrap();
         assert_eq!(quoted.as_f64(), Some(25.0));
         assert!(!quoted.is_unlimited());
+    }
+
+    #[test]
+    fn integers_survive_arriving_as_floats() {
+        // Caught against a real Freqtrade 2026.4 bot, which sent
+        // `max_open_trades: 2.0`. serde's i64 rejects a JSON float outright, so
+        // this was a hard parse failure that blanked the whole config.
+        assert_eq!(coerce_i64(&json!(2.0)), Some(2));
+        assert_eq!(coerce_i64(&json!(2)), Some(2));
+        assert_eq!(coerce_i64(&json!(-1.0)), Some(-1));
+        assert_eq!(coerce_i64(&json!("2")), Some(2));
+        assert_eq!(coerce_i64(&json!("2.0")), Some(2));
+        // Truncate toward zero rather than rounding; these are counts.
+        assert_eq!(coerce_i64(&json!(2.9)), Some(2));
+        assert_eq!(coerce_i64(&json!(-2.9)), Some(-2));
+        assert_eq!(coerce_i64(&json!(null)), None);
+        assert_eq!(coerce_i64(&json!("many")), None);
+    }
+
+    #[test]
+    fn floats_survive_arriving_as_strings() {
+        assert_eq!(coerce_f64(&json!(1.5)), Some(1.5));
+        assert_eq!(coerce_f64(&json!(2)), Some(2.0));
+        assert_eq!(coerce_f64(&json!("1.5")), Some(1.5));
+        assert_eq!(coerce_f64(&json!(null)), None);
+    }
+
+    #[test]
+    fn unsigned_fields_clamp_instead_of_wrapping() {
+        #[derive(Deserialize)]
+        struct Row {
+            #[serde(default, deserialize_with = "de_u32")]
+            value: u32,
+        }
+        let parse = |s: &str| serde_json::from_str::<Row>(s).unwrap().value;
+        assert_eq!(parse(r#"{"value":3.0}"#), 3);
+        assert_eq!(parse(r#"{"value":null}"#), 0);
+        assert_eq!(parse("{}"), 0);
+        // A negative decimals count would wrap to 4294967295 with `as u32`.
+        assert_eq!(parse(r#"{"value":-1}"#), 0);
     }
 
     #[test]
