@@ -1,0 +1,66 @@
+//! Top bar: active bot, its mode badge, and the theme toggle.
+
+use dioxus::prelude::*;
+
+use crate::api;
+use crate::state::{App, Theme};
+
+/// Which badge the header shows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Connecting,
+    Dry,
+    Live,
+    Offline,
+}
+
+#[component]
+pub fn Header() -> Element {
+    let mut app = App::get();
+    let active = app.active;
+
+    // Re-runs whenever the active bot changes. Loading the config is also how
+    // we learn whether the bot is reachable at all.
+    let config = use_resource(move || async move {
+        let id = active.read().clone()?;
+        Some(api::config(&id, false).await)
+    });
+
+    let mode = match &*config.read_unchecked() {
+        None | Some(None) => Mode::Connecting,
+        Some(Some(Ok(envelope))) if envelope.stale => Mode::Offline,
+        Some(Some(Ok(envelope))) => {
+            if envelope.data.dry_run {
+                Mode::Dry
+            } else {
+                Mode::Live
+            }
+        }
+        Some(Some(Err(_))) => Mode::Offline,
+    };
+
+    let name = app
+        .active_bot()
+        .map(|b| b.name)
+        .unwrap_or_else(|| "Freqtrade".to_owned());
+    let theme = *app.theme.read();
+
+    rsx! {
+        header { class: "header",
+            span { class: "header__name", "{name}" }
+            match mode {
+                Mode::Connecting => rsx! { span { class: "spinner muted" } },
+                Mode::Dry => rsx! { span { class: "badge badge--dry", "DRY" } },
+                Mode::Live => rsx! { span { class: "badge badge--live", "LIVE" } },
+                Mode::Offline => rsx! { span { class: "badge badge--offline", "OFFLINE" } },
+            }
+            span { class: "header__spacer" }
+            button {
+                class: "header__btn",
+                title: "Switch theme",
+                onclick: move |_| app.toggle_theme(),
+                if theme == Theme::Dark { "☀" } else { "🌙" }
+            }
+        }
+    }
+}

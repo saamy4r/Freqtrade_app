@@ -760,6 +760,51 @@ async fn ping_reports_a_down_bot_without_erroring() {
 }
 
 #[tokio::test]
+async fn settings_persist_the_active_bot_and_theme() {
+    // Kept server-side rather than in browser storage so the choice survives a
+    // reinstall and is identical wherever the UI runs.
+    let h = Harness::new();
+
+    let empty: serde_json::Value = h.get("/api/settings/active_bot").await.json();
+    assert_eq!(empty["value"], serde_json::Value::Null);
+
+    let saved: serde_json::Value = h
+        .request(
+            "PUT",
+            "/api/settings/active_bot",
+            Some(serde_json::json!({"value": "bot-1"})),
+        )
+        .await
+        .json();
+    assert_eq!(saved["value"], "bot-1");
+
+    let read_back: serde_json::Value = h.get("/api/settings/active_bot").await.json();
+    assert_eq!(read_back["value"], "bot-1");
+
+    // Independent keys.
+    h.request(
+        "PUT",
+        "/api/settings/theme",
+        Some(serde_json::json!({"value": "light"})),
+    )
+    .await;
+    let theme: serde_json::Value = h.get("/api/settings/theme").await.json();
+    assert_eq!(theme["value"], "light");
+    let still: serde_json::Value = h.get("/api/settings/active_bot").await.json();
+    assert_eq!(still["value"], "bot-1");
+
+    // Clearing, which is what deleting the active bot needs.
+    h.request(
+        "PUT",
+        "/api/settings/active_bot",
+        Some(serde_json::json!({"value": null})),
+    )
+    .await;
+    let cleared: serde_json::Value = h.get("/api/settings/active_bot").await.json();
+    assert_eq!(cleared["value"], "");
+}
+
+#[tokio::test]
 async fn health_needs_no_bot() {
     let h = Harness::new();
     assert!(h.get("/api/health").await.status.is_success());

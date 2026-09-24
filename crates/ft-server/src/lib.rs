@@ -14,7 +14,7 @@
 pub mod compute;
 mod error;
 mod fetch;
-mod routes;
+pub mod routes;
 mod state;
 
 use std::net::{Ipv4Addr, SocketAddr};
@@ -30,6 +30,7 @@ use ft_store::Store;
 
 pub use error::{ApiError, ApiResult};
 pub use fetch::ttl;
+pub use routes::settings::ACTIVE_BOT;
 pub use state::AppState;
 
 /// Builds the API router.
@@ -54,6 +55,10 @@ pub fn router(store: Arc<Store>, dev_cors: bool) -> Router {
         .route("/bots/{id}/pairs", get(routes::screens::pairs))
         .route("/bots/{id}/candles", get(routes::screens::candles))
         .route("/bots/{id}/forceexit", post(routes::screens::force_exit))
+        .route(
+            "/settings/{key}",
+            get(routes::settings::get).put(routes::settings::put),
+        )
         .with_state(state);
 
     let mut app = Router::new()

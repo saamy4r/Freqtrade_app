@@ -1,0 +1,20 @@
+[package]
+name = "ft-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ft-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dioxus = { version = "0.7", features = ["router"] }
+# reqwest builds for wasm32 on top of fetch, so one client serves the browser
+# dev loop and the Android build alike.
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "charset"] }
+
+[features]
+default = []
+web = ["dioxus/web"]
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]

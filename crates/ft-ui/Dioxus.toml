@@ -1,0 +1,14 @@
+[application]
+name = "freqtrade-visualizer"
+
+[web.app]
+title = "Freqtrade Visualizer"
+# Routes are client-side, so a deep link must fall back to index.html.
+base_path = ""
+
+[web.watcher]
+reload_html = true
+
+[web.resource]
+style = []
+script = []
