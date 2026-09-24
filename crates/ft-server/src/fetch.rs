@@ -1,0 +1,148 @@
+//! Cache-first reads with a live fallback.
+//!
+//! Three outcomes, in priority order:
+//!
+//! 1. Cache is present and younger than the TTL — return it untouched. This is
+//!    what makes revisiting a tab free. The Flutter app had no such path: every
+//!    tab mount and every bot switch re-issued the whole fan-out, and against a
+//!    real bot `/trades` and `/profit` measure 138-166ms each.
+//! 2. Cache is missing or stale — fetch from the bot, store it, return it.
+//! 3. The fetch fails and the bot is simply unreachable — return whatever is
+//!    cached, flagged `stale`, so the screen still renders. An auth failure or
+//!    a bot-side error is *not* swallowed this way; those propagate, because
+//!    showing yesterday's numbers to someone whose password is wrong just
+//!    hides the problem.
+
+use std::future::Future;
+use std::time::Duration;
+
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use time::OffsetDateTime;
+
+use ft_types::api::Envelope;
+
+use crate::error::{ApiError, ApiResult};
+use crate::state::AppState;
+
+/// How long a cached response is served without re-asking the bot.
+pub mod ttl {
+    use std::time::Duration;
+
+    /// Prices and P/L move constantly, but a tab switch inside a few seconds
+    /// should not pay for a round trip.
+    pub const TRADES: Duration = Duration::from_secs(5);
+    pub const BALANCE: Duration = Duration::from_secs(5);
+    pub const PROFIT: Duration = Duration::from_secs(10);
+    /// Configuration effectively never changes while the bot runs.
+    pub const CONFIG: Duration = Duration::from_secs(300);
+    pub const WHITELIST: Duration = Duration::from_secs(120);
+    pub const LOGS: Duration = Duration::from_secs(5);
+}
+
+/// A value plus where it came from.
+pub struct Fetched<T> {
+    pub value: T,
+    pub fetched_at: Option<OffsetDateTime>,
+    pub stale: bool,
+}
+
+impl<T> Fetched<T> {
+    pub fn into_envelope(self) -> Envelope<T> {
+        Envelope {
+            data: self.value,
+            stale: self.stale,
+            last_synced: self.fetched_at,
+        }
+    }
+}
+
+/// Returns the freshest acceptable value for a snapshot-shaped endpoint.
+///
+/// `what` names the data for the error message when there is nothing at all.
+pub async fn snapshot<T, F, Fut>(
+    state: &AppState,
+    bot_id: &str,
+    kind: &str,
+    ttl: Duration,
+    what: &'static str,
+    fetch: F,
+) -> ApiResult<Fetched<T>>
+where
+    T: Serialize + DeserializeOwned,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<T, ft_client::ClientError>>,
+{
+    let cached = state.store().snapshot::<T>(bot_id, kind)?;
+
+    if let Some(hit) = &cached {
+        if hit.age() <= ttl {
+            tracing::trace!(kind, "cache hit");
+            return Ok(Fetched {
+                fetched_at: Some(hit.fetched_at),
+                stale: false,
+                // Re-read rather than clone: T is not required to be Clone.
+                value: state
+                    .store()
+                    .snapshot::<T>(bot_id, kind)?
+                    .map(|c| c.value)
+                    .expect("snapshot present a moment ago"),
+            });
+        }
+    }
+
+    match fetch().await {
+        Ok(value) => {
+            state.store().put_snapshot(bot_id, kind, &value)?;
+            Ok(Fetched {
+                value,
+                fetched_at: Some(OffsetDateTime::now_utc()),
+                stale: false,
+            })
+        }
+        Err(e) if e.is_offline() => match cached {
+            // Unreachable, but we have something to show.
+            Some(hit) => {
+                tracing::debug!(kind, "bot unreachable, serving cache");
+                Ok(Fetched {
+                    value: hit.value,
+                    fetched_at: Some(hit.fetched_at),
+                    stale: true,
+                })
+            }
+            None => Err(ApiError::NoCache { what }),
+        },
+        // Auth failures and bot-side errors are real and must surface.
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Runs `fetch`, falling back to `cached` when the bot is merely unreachable.
+///
+/// For endpoints whose cache lives in a real table (trades, candles) rather
+/// than a snapshot blob.
+pub async fn with_fallback<T, Fut>(
+    fetch: Fut,
+    what: &'static str,
+    cached: impl FnOnce() -> ApiResult<Option<(T, Option<OffsetDateTime>)>>,
+) -> ApiResult<Fetched<T>>
+where
+    Fut: Future<Output = Result<T, ft_client::ClientError>>,
+{
+    match fetch.await {
+        Ok(value) => Ok(Fetched {
+            value,
+            fetched_at: Some(OffsetDateTime::now_utc()),
+            stale: false,
+        }),
+        Err(e) if e.is_offline() => match cached()? {
+            Some((value, fetched_at)) => Ok(Fetched {
+                value,
+                fetched_at,
+                stale: true,
+            }),
+            None => Err(ApiError::NoCache { what }),
+        },
+        Err(e) => Err(e.into()),
+    }
+}

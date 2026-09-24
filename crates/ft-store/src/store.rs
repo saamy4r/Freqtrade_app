@@ -26,6 +26,12 @@ pub mod kind {
     pub const PROFIT: &str = "profit";
     pub const BALANCE: &str = "balance";
     pub const WHITELIST: &str = "whitelist";
+    pub const LOGS: &str = "logs";
+    /// Freshness marks. The data lives in the `trades` table; these rows exist
+    /// only to record when that table was last synced, reusing `fetched_at`
+    /// rather than adding a column to every trade.
+    pub const OPEN_MARK: &str = "mark:open";
+    pub const CLOSED_MARK: &str = "mark:closed";
 }
 
 pub struct Store {
@@ -373,6 +379,20 @@ impl Store {
             })
         })
         .transpose()
+    }
+
+    /// Forgets one cached response, so the next read refetches.
+    ///
+    /// Used after an action that invalidates data we just cached -- a force
+    /// exit changes the open set immediately.
+    pub fn clear_snapshot(&self, bot_id: &str, kind: &str) -> Result<()> {
+        self.with(|conn| {
+            conn.execute(
+                "DELETE FROM snapshots WHERE bot_id = ?1 AND kind = ?2",
+                params![bot_id, kind],
+            )?;
+            Ok(())
+        })
     }
 
     /// The most recent sync time across every cached kind, for the offline
