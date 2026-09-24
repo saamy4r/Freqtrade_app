@@ -1984,9 +1984,12 @@ version = "0.1.0"
 dependencies = [
  "dioxus",
  "ft-types",
+ "js-sys",
  "reqwest 0.13.1",
  "serde",
  "serde_json",
+ "time",
+ "wasm-bindgen",
  "web-sys",
 ]
 

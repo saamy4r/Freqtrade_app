@@ -8,6 +8,7 @@ license.workspace = true
 ft-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+time.workspace = true
 dioxus = { version = "0.7", features = ["router"] }
 # reqwest builds for wasm32 on top of fetch, so one client serves the browser
 # dev loop and the Android build alike.
@@ -16,6 +17,10 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "que
 # Only the browser build needs to ask where it is being served from.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["Window", "Location"] }
+# Dates are formatted with the browser's own locale rather than forced to UTC:
+# a trade's time is only useful in the reader's timezone.
+js-sys = "0.3"
+wasm-bindgen = "0.2"
 
 [features]
 default = []
