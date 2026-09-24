@@ -1,0 +1,42 @@
+[
+  {
+    "trade_id": 42,
+    "pair": "BTC/USDT",
+    "base_currency": "BTC",
+    "quote_currency": "USDT",
+    "is_open": true,
+    "is_short": false,
+    "amount": 0.0015,
+    "stake_amount": 100.0,
+    "open_rate": 66500.0,
+    "current_rate": 67200.5,
+    "close_rate": null,
+    "profit_ratio": 0.0105,
+    "profit_abs": 1.05,
+    "profit_pct": 1.05,
+    "open_date": "2024-09-20 08:15:00",
+    "open_timestamp": 1726820100000,
+    "close_date": null,
+    "close_timestamp": null,
+    "exit_reason": null,
+    "strategy": "SampleStrategy",
+    "timeframe": 5,
+    "leverage": 1.0,
+    "stop_loss_abs": 59850.0,
+    "trading_mode": "spot"
+  },
+  {
+    "trade_id": 43,
+    "pair": "ETH/USDT",
+    "is_open": true,
+    "is_short": true,
+    "amount": 0.05,
+    "stake_amount": 100.0,
+    "open_rate": 2500.0,
+    "current_rate": null,
+    "profit_ratio": -0.02,
+    "profit_abs": -2.0,
+    "open_date": "2024-09-21 10:00:00",
+    "open_timestamp": 1726912800000
+  }
+]

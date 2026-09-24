@@ -1,0 +1,22 @@
+{
+  "profit_closed_coin": 2.14,
+  "profit_closed_percent_mean": 1.07,
+  "profit_closed_ratio_mean": 0.0107,
+  "profit_closed_percent": 0.21,
+  "profit_all_coin": 1.09,
+  "profit_all_percent": 0.11,
+  "trade_count": 4,
+  "closed_trade_count": 2,
+  "first_trade_timestamp": 1726650000000,
+  "latest_trade_timestamp": 1726768800000,
+  "avg_duration": "0:52:30",
+  "best_pair": "SOL/USDT",
+  "best_rate": 5.0,
+  "best_pair_profit_ratio": 0.05,
+  "winning_trades": 1,
+  "losing_trades": 1,
+  "profit_factor": 1.748,
+  "trading_volume": 400.0,
+  "max_drawdown": 0.0286,
+  "starting_capital": 1000.0
+}

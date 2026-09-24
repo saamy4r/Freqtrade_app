@@ -1,0 +1,43 @@
+{
+  "trades": [
+    {
+      "trade_id": 40,
+      "pair": "SOL/USDT",
+      "is_open": false,
+      "is_short": false,
+      "amount": 2.0,
+      "stake_amount": 100.0,
+      "open_rate": 140.0,
+      "current_rate": 147.0,
+      "close_rate": 147.0,
+      "profit_ratio": 0.05,
+      "profit_abs": 5.0,
+      "profit_pct": 5.0,
+      "open_date": "2024-09-18 09:00:00",
+      "open_timestamp": 1726650000000,
+      "close_date": "2024-09-19 14:30:00",
+      "close_timestamp": 1726756200000,
+      "exit_reason": "roi"
+    },
+    {
+      "trade_id": 41,
+      "pair": "ADA/USDT",
+      "is_open": false,
+      "is_short": true,
+      "amount": 300.0,
+      "stake_amount": 100.0,
+      "open_rate": 0.35,
+      "close_rate": 0.36,
+      "profit_ratio": -0.0286,
+      "profit_abs": -2.86,
+      "open_date": "2024-09-19 11:00:00",
+      "open_timestamp": 1726743600000,
+      "close_date": "2024-09-19 18:00:00",
+      "close_timestamp": 1726768800000,
+      "exit_reason": "stop_loss"
+    }
+  ],
+  "trades_count": 2,
+  "offset": 0,
+  "total_trades": 2
+}

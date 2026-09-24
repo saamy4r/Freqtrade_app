@@ -1,0 +1,5 @@
+{
+  "whitelist": ["BTC/USDT", "ETH/USDT", "SOL/USDT"],
+  "length": 3,
+  "method": ["StaticPairList"]
+}

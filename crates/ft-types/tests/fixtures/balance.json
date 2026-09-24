@@ -1,0 +1,37 @@
+{
+  "currencies": [
+    {
+      "currency": "USDT",
+      "free": 812.44,
+      "balance": 1012.44,
+      "used": 200.0,
+      "bot_owned": 1012.44,
+      "est_stake": 1012.44,
+      "est_stake_bot": 1012.44,
+      "stake": "USDT",
+      "side": "long",
+      "is_position": false,
+      "position": 0,
+      "is_bot_managed": true
+    },
+    {
+      "currency": "BTC/USDT:USDT",
+      "free": 0,
+      "balance": 0,
+      "used": 0,
+      "est_stake": 100.0,
+      "stake": "USDT",
+      "side": "long",
+      "is_position": true,
+      "position": 0.0015,
+      "is_bot_managed": true
+    }
+  ],
+  "total": 1012.44,
+  "total_bot": 1012.44,
+  "symbol": "USDT",
+  "value": 1012.44,
+  "stake": "USDT",
+  "starting_capital": 1000.0,
+  "note": ""
+}
