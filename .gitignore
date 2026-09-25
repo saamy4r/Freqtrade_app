@@ -27,3 +27,7 @@ crates/ft-types/tests/fixtures/live/
 *.jks
 *.keystore
 *.password
+
+# Release artefacts, attached to GitHub releases rather than committed —
+# the Flutter repo carried 69MB of them in-tree.
+/dist/

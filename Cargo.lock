@@ -1944,7 +1944,7 @@ dependencies = [
 
 [[package]]
 name = "freqtrade"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "android_logger",
  "dioxus",
@@ -1972,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "ft-client"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "base64 0.23.1",
  "ft-types",
@@ -1989,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "ft-server"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "axum",
  "ft-client",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "ft-store"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "aes-gcm",
  "ft-types",
@@ -2028,7 +2028,7 @@ dependencies = [
 
 [[package]]
 name = "ft-types"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",
