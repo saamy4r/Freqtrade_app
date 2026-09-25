@@ -23,7 +23,7 @@ Written in Rust. Version 2 is a complete rewrite of the original Flutter app.
 **Linux** — extract and run:
 
 ```bash
-tar -xzf freqtrade-visualizer-v2.0.0-linux-x64.tar.gz
+tar -xzf freqtrade-visualizer-v2.0.1-linux-x64.tar.gz
 ./freqtrade-visualizer/freqtrade
 ```
 
@@ -31,7 +31,7 @@ Or install it properly for your user — a launcher entry and icon, no root,
 nothing outside `~/.local`:
 
 ```bash
-scripts/install-linux.sh freqtrade-visualizer-v2.0.0-linux-x64.tar.gz
+scripts/install-linux.sh freqtrade-visualizer-v2.0.1-linux-x64.tar.gz
 scripts/install-linux.sh --uninstall     # leaves your bots and trades alone
 ```
 

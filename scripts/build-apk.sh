@@ -58,6 +58,15 @@ cp -r "$ROOT/crates/freqtrade/android-res/." "$RES/"
 # carry the credential key and the database off the device.
 python3 "$ROOT/scripts/harden-manifest.py" "$GRADLE_DIR/app/src/main/AndroidManifest.xml"
 
+# dx hardcodes versionCode = 1, so every release looks like the same build to
+# Android's package manager and an update can be refused as "already
+# installed". Derive it from the workspace version: 2.0.1 -> 20001.
+GRADLE_BUILD="$GRADLE_DIR/app/build.gradle.kts"
+VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)
+CODE=$(echo "$VERSION" | awk -F. '{printf "%d", $1*10000 + $2*100 + $3}')
+sed -i "s/^\( *versionCode *=\) *1$/\1 $CODE/" "$GRADLE_BUILD"
+echo "   version: $VERSION (code $CODE)"
+
 echo "==> repackaging"
 ( cd "$GRADLE_DIR" && ./gradlew --quiet "$GRADLE_TASK" )
 
