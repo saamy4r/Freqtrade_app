@@ -30,10 +30,17 @@ for tool in java dx magick; do
 done
 [ -n "${ANDROID_NDK_HOME:-}" ] || { echo "no NDK under $ANDROID_HOME/ndk" >&2; exit 1; }
 
+GRADLE_DIR="$ROOT/target/dx/freqtrade/$PROFILE/android/app"
+
+# Start from a clean scaffold. dx regenerates its stock launcher icons on every
+# build but does not remove the ones we added last time, and gradle refuses to
+# merge a .png and a .webp claiming the same resource name. Leaving the old
+# project in place makes the build fail on the second run and succeed on the
+# first, which is a miserable thing to debug.
+rm -rf "$GRADLE_DIR"
+
 echo "==> building ($PROFILE, aarch64)"
 dx build --package freqtrade --platform android "${DX_FLAGS[@]}"
-
-GRADLE_DIR="$ROOT/target/dx/freqtrade/$PROFILE/android/app"
 RES="$GRADLE_DIR/app/src/main/res"
 [ -d "$RES" ] || { echo "no gradle project at $GRADLE_DIR" >&2; exit 1; }
 

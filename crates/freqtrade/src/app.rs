@@ -6,7 +6,15 @@ use crate::components::{BottomNav, Header};
 use crate::screens::{Bots, Chart, ClosedTrades, Dashboard, Logs, OpenTrades};
 use crate::state::App as AppState;
 
-const MAIN_CSS: Asset = asset!("/assets/main.css");
+/// The stylesheet, compiled into the binary rather than served as an asset.
+///
+/// It is 16KB — smaller than the HTTP round trip it replaces — and inlining it
+/// removes a whole class of platform-specific failure. Served as a linked
+/// asset it rendered correctly on the web and on desktop but arrived unstyled
+/// on Android, where assets come out of the APK through a different path
+/// entirely. There is nothing for that path to get wrong if the CSS is simply
+/// part of the page.
+const MAIN_CSS: &str = include_str!("../assets/main.css");
 
 /// Screens, in the legacy tab order.
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -39,7 +47,7 @@ pub fn App() -> Element {
     let previous_crash = crate::logging::last_crash();
 
     rsx! {
-        document::Stylesheet { href: MAIN_CSS }
+        document::Style { {MAIN_CSS} }
         // Dioxus renders into <body>, so the theme attribute goes on a wrapper
         // rather than <html>; the CSS selector matches either.
         div { "data-theme": "{theme}", class: "shell",
