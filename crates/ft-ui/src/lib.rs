@@ -7,6 +7,7 @@
 
 pub mod api;
 pub mod app;
+pub mod backend;
 pub mod components;
 pub mod events;
 pub mod format;

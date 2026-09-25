@@ -13,19 +13,30 @@ dioxus = { version = "0.7", features = ["router"] }
 futures-channel = "0.3"
 futures-util = "0.3"
 # reqwest builds for wasm32 on top of fetch, so one client serves the browser
-# dev loop and the Android build alike.
+# dev loop and the packaged app alike.
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "charset"] }
 
-# Only the browser build needs to ask where it is being served from.
+# The server is embedded in the builds that ship as an app; the web build talks
+# to a standalone one on the same origin instead.
+ft-server = { workspace = true, optional = true }
+ft-store = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+# Only the browser build needs to ask where it is being served from, and dates
+# are formatted with the browser's own locale rather than forced to UTC.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["Window", "Location", "EventSource", "MessageEvent", "EventTarget"] }
-# Dates are formatted with the browser's own locale rather than forced to UTC:
-# a trade's time is only useful in the reader's timezone.
 js-sys = "0.3"
 wasm-bindgen = "0.2"
+
+# Asking Android where this app may write files means asking the Java runtime.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
 
 [features]
 default = []
 web = ["dioxus/web"]
-desktop = ["dioxus/desktop"]
-mobile = ["dioxus/mobile"]
+desktop = ["dioxus/desktop", "embedded-server"]
+mobile = ["dioxus/mobile", "embedded-server"]
+embedded-server = ["dep:ft-server", "dep:ft-store", "dep:tokio"]
