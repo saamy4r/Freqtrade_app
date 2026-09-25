@@ -9,17 +9,17 @@ fn main() {
     start_embedded();
 
     #[cfg(not(feature = "embedded-server"))]
-    ft_ui::logging::init(std::path::Path::new("."));
+    freqtrade::logging::init(std::path::Path::new("."));
 
     #[cfg(any(feature = "web", feature = "desktop", feature = "mobile"))]
-    dioxus::launch(ft_ui::App);
+    dioxus::launch(freqtrade::App);
 
     #[cfg(not(any(feature = "web", feature = "desktop", feature = "mobile")))]
     {
         eprintln!(
-            "ft-ui was built without a renderer.\n\
-             Development:  dx serve --package ft-ui --platform web\n\
-             Android:      dx serve --package ft-ui --platform android"
+            "freqtrade was built without a renderer.\n\
+             Development:  dx serve --package freqtrade --platform web\n\
+             Android:      dx serve --package freqtrade --platform android"
         );
         std::process::exit(64);
     }
@@ -38,29 +38,29 @@ fn start_embedded() {
     // plain HTTP — and building a client without a provider panics.
     ft_server::install_crypto_provider();
 
-    let data_dir = match ft_ui::backend::data_dir() {
+    let data_dir = match freqtrade::backend::data_dir() {
         Ok(dir) => dir,
         Err(e) => {
             // Nowhere to write a crash note either, so this is as loud as it
             // gets. Panicking makes the failure visible rather than leaving a
             // window that closes itself.
-            ft_ui::logging::init(std::path::Path::new("."));
+            freqtrade::logging::init(std::path::Path::new("."));
             panic!("could not find a writable directory for the database: {e}");
         }
     };
     let _ = std::fs::create_dir_all(&data_dir);
-    ft_ui::logging::init(&data_dir);
+    freqtrade::logging::init(&data_dir);
 
     let db_path = data_dir.join("ft.db");
     tracing::info!(path = %db_path.display(), "opening database");
 
-    match ft_ui::backend::start(db_path) {
+    match freqtrade::backend::start(db_path) {
         Ok(port) => {
             tracing::info!(port, "embedded server listening");
-            ft_ui::api::set_base_url(format!("http://127.0.0.1:{port}/api"));
+            freqtrade::api::set_base_url(format!("http://127.0.0.1:{port}/api"));
         }
         // Recorded and rendered by the UI rather than aborting, so the reason
         // reaches the screen instead of disappearing with the process.
-        Err(e) => ft_ui::startup_failed(format!("the embedded server did not start: {e}")),
+        Err(e) => freqtrade::startup_failed(format!("the embedded server did not start: {e}")),
     }
 }

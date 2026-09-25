@@ -5,7 +5,7 @@ members = [
     "crates/ft-client",
     "crates/ft-store",
     "crates/ft-server",
-    "crates/ft-ui",
+    "crates/freqtrade",
 ]
 
 [workspace.package]
@@ -19,7 +19,7 @@ ft-types = { path = "crates/ft-types" }
 ft-client = { path = "crates/ft-client" }
 ft-store = { path = "crates/ft-store" }
 ft-server = { path = "crates/ft-server" }
-ft-ui = { path = "crates/ft-ui" }
+freqtrade = { path = "crates/freqtrade" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -1,5 +1,14 @@
 [application]
-name = "freqtrade-visualizer"
+# Shown under the launcher icon and in the app switcher. Without this the name
+# is derived from the crate, which gave "FtUi".
+name = "Freqtrade"
+
+[bundle]
+# `com.example.*` is a placeholder Google rejects and which says nothing about
+# who published the app. Changing it makes Android treat this as a different
+# application, so an existing install is replaced rather than upgraded.
+identifier = "com.saamyar.freqtrade"
+icon = ["assets/icon.png"]
 
 [web.app]
 title = "Freqtrade Visualizer"

@@ -37,9 +37,9 @@ command -v dx >/dev/null || {
 }
 
 echo "==> building UI ($PROFILE)"
-dx build --package ft-ui --platform web "${DX_FLAGS[@]}"
+dx build --package freqtrade --platform web "${DX_FLAGS[@]}"
 
-BUNDLE="$ROOT/target/dx/ft-ui/$PROFILE/web/public"
+BUNDLE="$ROOT/target/dx/freqtrade/$PROFILE/web/public"
 [[ -d "$BUNDLE" ]] || { echo "no bundle at $BUNDLE" >&2; exit 1; }
 
 echo "==> building server"

@@ -1943,6 +1943,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "freqtrade"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "dioxus",
+ "ft-server",
+ "ft-store",
+ "ft-types",
+ "futures-channel",
+ "futures-util",
+ "jni 0.21.1",
+ "js-sys",
+ "log",
+ "ndk-context",
+ "reqwest 0.13.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "ft-client"
 version = "0.1.0"
 dependencies = [
@@ -2005,33 +2032,6 @@ dependencies = [
  "serde",
  "serde_json",
  "time",
-]
-
-[[package]]
-name = "ft-ui"
-version = "0.1.0"
-dependencies = [
- "android_logger",
- "dioxus",
- "ft-server",
- "ft-store",
- "ft-types",
- "futures-channel",
- "futures-util",
- "jni 0.21.1",
- "js-sys",
- "log",
- "ndk-context",
- "reqwest 0.13.1",
- "serde",
- "serde_json",
- "tempfile",
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
