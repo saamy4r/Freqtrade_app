@@ -32,12 +32,25 @@ pub fn App() -> Element {
     let state = AppState::provide();
     let theme = state.theme.read().as_str();
 
+    // A failed start, or a crash the previous run recorded, is shown instead
+    // of the app. On a phone there is no console to check, so the screen is
+    // the only place a reason can reach the user.
+    let blocking = crate::startup_failure().map(|r| ("The app could not start", r));
+    let previous_crash = crate::logging::last_crash();
+
     rsx! {
         document::Stylesheet { href: MAIN_CSS }
         // Dioxus renders into <body>, so the theme attribute goes on a wrapper
         // rather than <html>; the CSS selector matches either.
         div { "data-theme": "{theme}", class: "shell",
-            Router::<Route> {}
+            if let Some((title, detail)) = blocking {
+                FailureReport { title: title.to_string(), detail: detail.to_string() }
+            } else {
+                if let Some(note) = previous_crash {
+                    CrashNotice { note: note.to_string() }
+                }
+                Router::<Route> {}
+            }
         }
     }
 }
@@ -68,5 +81,43 @@ fn Shell() -> Element {
             Outlet::<Route> {}
         }
         BottomNav {}
+    }
+}
+
+/// Shown in place of the app when it cannot run at all.
+#[component]
+fn FailureReport(title: String, detail: String) -> Element {
+    rsx! {
+        div { class: "content",
+            div { class: "empty",
+                div { class: "empty__icon", "⚠" }
+                div { class: "empty__title", "{title}" }
+                pre { class: "failure", "{detail}" }
+            }
+        }
+    }
+}
+
+/// Shown once after a crash, above an otherwise working app.
+#[component]
+fn CrashNotice(note: String) -> Element {
+    let mut dismissed = use_signal(|| false);
+    if dismissed() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "content", style: "padding-bottom:0",
+            div { class: "banner banner--crash",
+                div { style: "flex:1;min-width:0",
+                    div { style: "font-weight:650;margin-bottom:4px", "The app closed unexpectedly last time" }
+                    pre { class: "failure", "{note}" }
+                }
+                button {
+                    class: "btn btn--ghost btn--small",
+                    onclick: move |_| dismissed.set(true),
+                    "Dismiss"
+                }
+            }
+        }
     }
 }

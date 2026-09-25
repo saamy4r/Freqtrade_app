@@ -46,3 +46,6 @@ web = ["dioxus/web"]
 desktop = ["dioxus/desktop", "embedded-server"]
 mobile = ["dioxus/mobile", "embedded-server"]
 embedded-server = ["dep:ft-server", "dep:ft-store", "dep:tokio"]
+
+[dev-dependencies]
+tempfile = "3"

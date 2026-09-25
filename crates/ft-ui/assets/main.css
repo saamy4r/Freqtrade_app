@@ -614,3 +614,22 @@ button { font: inherit; color: inherit; cursor: pointer; }
    shrink below its content width without it, so the text would overflow the
    row and be clipped no matter what `overflow-wrap` says. */
 .term__msg { flex: 1; min-width: 0; }
+
+/* ---------- failure reporting ---------- */
+
+.failure {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow: auto;
+}
+.banner--crash { align-items: flex-start; background: var(--loss-bg); color: var(--loss); }
