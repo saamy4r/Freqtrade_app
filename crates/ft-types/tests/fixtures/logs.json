@@ -1,0 +1,10 @@
+{
+  "log_count": 4,
+  "logs": [
+    ["2024-09-24 08:00:01,123", 1727164801.123, "freqtrade.worker", "INFO", "Bot heartbeat. PID=1234, version='2024.9', state='RUNNING'"],
+    ["2024-09-24 08:00:05,001", 1727164805.001, "freqtrade.exchange", "WARNING", "Could not load markets, retrying in 5s"],
+    ["2024-09-24 08:00:09,456", 1727164809.456, "freqtrade.rpc", "ERROR", "Error fetching ticker for BTC/USDT"],
+    ["2024-09-24 08:00:11,000", 1727164811.0, "freqtrade.strategy", "DEBUG", "Analyzing pair SOL/USDT"],
+    ["truncated row"]
+  ]
+}

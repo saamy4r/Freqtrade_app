@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ft-types",
+    "crates/ft-client",
+    "crates/ft-store",
+    "crates/ft-server",
+    "crates/freqtrade",
+]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/saamy4r/Freqtrade_app"
+
+[workspace.dependencies]
+ft-types = { path = "crates/ft-types" }
+ft-client = { path = "crates/ft-client" }
+ft-store = { path = "crates/ft-store" }
+ft-server = { path = "crates/ft-server" }
+freqtrade = { path = "crates/freqtrade" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

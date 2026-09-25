@@ -1,0 +1,11 @@
+{
+  "profit_closed_coin": 0,
+  "profit_closed_percent_mean": 0,
+  "trade_count": 0,
+  "closed_trade_count": 0,
+  "avg_duration": null,
+  "best_pair": null,
+  "best_rate": null,
+  "trading_volume": null,
+  "starting_capital": 0
+}

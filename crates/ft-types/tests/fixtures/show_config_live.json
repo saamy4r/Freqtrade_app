@@ -1,0 +1,19 @@
+{
+  "version": "2026.4",
+  "dry_run": false,
+  "trading_mode": "futures",
+  "short_allowed": true,
+  "stake_currency": "USDT",
+  "stake_amount": 50.5,
+  "max_open_trades": -1.0,
+  "stoploss": -1.0,
+  "stoploss_on_exchange": true,
+  "timeframe": "1h",
+  "exchange": "bybit",
+  "strategy": "FuturesStrategy",
+  "bot_name": "prod",
+  "state": "running",
+  "runmode": "live",
+  "margin_mode": "isolated",
+  "stake_currency_decimals": 3.0
+}

@@ -1,38 +1,33 @@
-# General
-build/
-.dart_tool/
-.idea/
-*.iml
-*.md
-*.packages
+# Rust
+/target/
+**/*.rs.bk
 
+# Dioxus
+/dist/
+.dioxus/
+
+# Android (from M11)
+/crates/ft-ui/gen/
+local.properties
+key.properties
+*.keystore
+*.jks
+
+# Local dev
+.env
+*.db
+*.db-journal
 .claude
-# Android
-android/local.properties
-android/key.properties
-android/.gradle/
-android/app/build/
 
-# iOS
-ios/Pods/
-ios/Podfile.lock
-ios/.symlinks/
-ios/Runner/GeneratedPluginRegistrant.h
-ios/Runner/GeneratedPluginRegistrant.m
-ios/Runner.xcworkspace/
+# Real responses captured from a live bot (scripts/capture-fixtures.sh)
+crates/ft-types/tests/fixtures/live/
 
-# macOS
-macos/Pods/
-macos/Podfile.lock
-macos/.symlinks/
-macos/Runner.xcworkspace/
+# Release signing material lives outside the repo (~/.config/freqtrade);
+# these patterns are a backstop against ever committing a copy.
+*.jks
+*.keystore
+*.password
 
-# Linux
-linux/build/
-linux/.config
-
-# Windows
-windows/build/
-windows/runner/Debug/
-windows/runner/Release/
-windows/runner/Profile/
+# Release artefacts, attached to GitHub releases rather than committed —
+# the Flutter repo carried 69MB of them in-tree.
+/dist/
