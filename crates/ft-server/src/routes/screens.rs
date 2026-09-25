@@ -75,6 +75,10 @@ pub async fn config(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<BotConfig>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, q.refresh).await;
+
     // The header badge reads this endpoint, so it has to learn about an
     // outage even when the config itself is cached and long-lived.
     let offline = fetch::known_offline(&state, &bot_id);
@@ -337,6 +341,10 @@ pub async fn overview(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Overview>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, q.refresh).await;
+
     // Run both together: they are independent, and a cache hit makes either
     // essentially free.
     let (trades, balance) = tokio::join!(
@@ -369,6 +377,10 @@ pub async fn closed(
     Path(bot_id): Path<String>,
     Query(page): Query<Page>,
 ) -> ApiResult<Json<Envelope<ClosedTrades>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, page.screen.refresh).await;
+
     let (sync, balance, profit) = tokio::join!(
         sync_closed_trades(&state, &bot_id, &page.screen),
         load_balance(&state, &bot_id, &page.screen),
@@ -415,6 +427,10 @@ pub async fn dashboard(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Dashboard>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, q.refresh).await;
+
     let (sync, profit, config, balance) = tokio::join!(
         sync_closed_trades(&state, &bot_id, &q),
         load_profit(&state, &bot_id, &q),
@@ -464,6 +480,10 @@ pub async fn logs(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Logs>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, q.refresh).await;
+
     let offline = fetch::offline_cache::<LogsResponse>(&state, &bot_id, kind::LOGS, "logs")?;
     let fetched = match offline {
         Some(cached) => cached,
@@ -498,6 +518,10 @@ pub async fn pairs(
     Path(bot_id): Path<String>,
     Query(q): Query<ScreenQuery>,
 ) -> ApiResult<Json<Envelope<Vec<ChartPair>>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, q.refresh).await;
+
     let cached_whitelist =
         fetch::offline_cache::<WhitelistResponse>(&state, &bot_id, kind::WHITELIST, "whitelist")?;
     let whitelist = match cached_whitelist {
@@ -559,6 +583,11 @@ pub struct CandleQuery {
     pub pair: String,
     pub timeframe: Option<String>,
     pub limit: Option<u32>,
+    /// As `ScreenQuery::refresh`, spelled out rather than flattened: this
+    /// struct has typed numeric fields, and `#[serde(flatten)]` would deliver
+    /// every query value as a string and break them.
+    #[serde(default, deserialize_with = "de_flag")]
+    pub refresh: bool,
 }
 
 /// `GET /api/bots/:id/candles?pair=…`
@@ -567,6 +596,10 @@ pub async fn candles(
     Path(bot_id): Path<String>,
     Query(query): Query<CandleQuery>,
 ) -> ApiResult<Json<Envelope<Candles>>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    fetch::revalidate(&state, &bot_id, query.refresh).await;
+
     if query.pair.trim().is_empty() {
         return Err(ApiError::BadRequest("a pair is required".into()));
     }
@@ -693,6 +726,11 @@ pub async fn force_exit(
     Path(bot_id): Path<String>,
     Json(body): Json<ForceExitBody>,
 ) -> ApiResult<Json<ActionResult>> {
+    // Before any cache gate: an outage recorded earlier is re-tested here, or
+    // it would never end. See `fetch::revalidate`.
+    // A user acting on a trade outranks any recorded outage.
+    fetch::revalidate(&state, &bot_id, true).await;
+
     let client = state.client(&bot_id).await?;
     let result = client.force_exit(body.trade_id).await?;
     tracing::info!(bot_id, trade_id = body.trade_id, "force exit requested");

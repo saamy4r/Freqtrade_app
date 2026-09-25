@@ -23,6 +23,11 @@ ft-server = { workspace = true, optional = true }
 ft-store = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
+# Native builds read the server's event stream themselves, which needs a
+# streaming response body. wasm uses EventSource and has no such feature.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["stream"] }
+
 # Only the browser build needs to ask where it is being served from, and dates
 # are formatted with the browser's own locale rather than forced to UTC.
 [target.'cfg(target_arch = "wasm32")'.dependencies]

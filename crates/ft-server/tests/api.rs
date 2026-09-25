@@ -120,7 +120,14 @@ impl MockBot {
 
 /// A mock Freqtrade with every endpoint the screens use.
 async fn mock_bot() -> MockBot {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    mock_bot_on(0).await
+}
+
+/// The same, on a chosen port, so a bot can be brought back at the address the
+/// app already has stored for it -- which is what "the phone reconnects" looks
+/// like from the server's side.
+async fn mock_bot_on(port: u16) -> MockBot {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = MockServer::builder().listener(listener).start().await;
     mount_auth(&server).await;
@@ -987,4 +994,39 @@ async fn a_cold_start_with_a_dead_bot_still_serves_every_cached_screen() {
 async fn health_needs_no_bot() {
     let h = Harness::new();
     assert!(h.get("/api/health").await.status.is_success());
+}
+
+#[tokio::test]
+async fn a_bot_that_comes_back_is_noticed_again() {
+    // The bug this pins down: the phone loses signal, the app correctly falls
+    // back to cache, and then the signal returns and the app stays offline
+    // forever. Reachability was recorded as a plain boolean with no expiry and
+    // consulted *before* the fetch, so nothing on the request path could ever
+    // disprove it -- pull-to-refresh included, since that only zeroes the TTL.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let port = server.port;
+    let id = add_bot(&h, &server).await;
+
+    let online: Envelope<Overview> = h.get(&format!("/api/bots/{id}/overview")).await.json();
+    assert!(!online.stale);
+
+    server.shutdown().await;
+    let offline: Envelope<Overview> = h
+        .get(&format!("/api/bots/{id}/overview?refresh=true"))
+        .await
+        .json();
+    assert!(offline.stale, "an unreachable bot is stale");
+
+    // Signal comes back: same host, same port, same stored credentials.
+    let _server = mock_bot_on(port).await;
+
+    let back: Envelope<Overview> = h
+        .get(&format!("/api/bots/{id}/overview?refresh=true"))
+        .await
+        .json();
+    assert!(
+        !back.stale,
+        "an explicit refresh must re-probe a bot that was written off as offline"
+    );
 }

@@ -73,6 +73,9 @@ pub fn record_reachable(state: &AppState, bot_id: &str, reachable: bool) {
 ///
 /// A screen served entirely from a still-fresh cache has learned nothing about
 /// the bot, so it asks this rather than claiming freshness it cannot vouch for.
+///
+/// This reports what was last *learned*; it does not decide whether to go on
+/// believing it. That is [`revalidate`]'s job, and it runs first.
 pub fn known_offline(state: &AppState, bot_id: &str) -> bool {
     state
         .store()
@@ -80,6 +83,49 @@ pub fn known_offline(state: &AppState, bot_id: &str) -> bool {
         .ok()
         .flatten()
         .is_some_and(|c| !c.value)
+}
+
+/// How long an outage is taken on trust before the request path re-tests it.
+///
+/// Matched to the background sync interval: they are the same job seen from
+/// two sides, and probing more eagerly than the sync refreshes would only add
+/// timeouts to requests the sync is about to answer anyway.
+pub const OFFLINE_RETRY: Duration = Duration::from_secs(15);
+
+/// Re-tests a bot that was written off as offline, so the outage can end.
+///
+/// Reachability is a dated observation, not a verdict. Without this it behaved
+/// as a verdict: every cache gate consults [`known_offline`] *before* fetching,
+/// and pull-to-refresh only zeroes the TTL, so once a phone lost signal nothing
+/// on the request path could ever discover the bot had come back -- the app
+/// stayed offline until it was restarted, refresh included.
+///
+/// Call this once at the top of a request, before the gates, so each
+/// `known_offline` below reads a fresh answer. The probe is `GET /ping`:
+/// unauthenticated, on a 3s timeout, and at most one per request -- affordable
+/// on a screen that aggregates several endpoints, which re-attempting every
+/// fetch is not. A failed probe is re-stamped rather than left alone, so the
+/// next request waits a further window instead of paying for a probe each time.
+///
+/// `forced` is pull-to-refresh: the user asking directly outranks the window.
+pub async fn revalidate(state: &AppState, bot_id: &str, forced: bool) {
+    let Some(last) = state
+        .store()
+        .snapshot::<bool>(bot_id, ft_store::kind::REACHABLE)
+        .ok()
+        .flatten()
+    else {
+        return; // Never seen to be down; there is nothing to disprove.
+    };
+    if last.value || (!forced && last.age() <= OFFLINE_RETRY) {
+        return;
+    }
+
+    let Ok(Some(bot)) = state.store().get_bot(bot_id) else {
+        return;
+    };
+    let alive = matches!(ft_client::FreqtradeClient::ping(&bot.url).await, Ok(true));
+    record_reachable(state, bot_id, alive);
 }
 
 /// Cached data for a bot already known to be unreachable, if any.
