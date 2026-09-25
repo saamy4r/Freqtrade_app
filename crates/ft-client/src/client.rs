@@ -27,8 +27,15 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// We build reqwest with `rustls-no-provider` to keep `aws-lc-rs` out of the
 /// Android build (see docs/android-notes.md), which means nothing registers a
-/// default provider for us and the first HTTPS handshake would otherwise fail.
-fn ensure_crypto_provider() {
+/// default provider for us.
+///
+/// Public because Cargo unifies features across a build: any crate sharing a
+/// dependency graph with this one gets reqwest's rustls whether it asked for
+/// TLS or not, and `reqwest::Client::new()` then **panics** with "No provider
+/// set". That is exactly how the first Android build died — the UI's own
+/// client talks only to loopback over plain HTTP and still needed this. Call
+/// it once at startup on any native target.
+pub fn install_crypto_provider() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         // Errs only if another provider is already installed, which is fine.
@@ -73,7 +80,7 @@ impl FreqtradeClient {
         password: &str,
         timeout: Duration,
     ) -> Result<Self> {
-        ensure_crypto_provider();
+        install_crypto_provider();
         let base_url = normalize_base_url(base_url)?;
         let http = reqwest::Client::builder()
             .timeout(timeout)
@@ -329,7 +336,7 @@ impl FreqtradeClient {
     /// Associated rather than a method so the Bots screen can check a bot it has
     /// no credentials loaded for.
     pub async fn ping(base_url: &str) -> Result<bool> {
-        ensure_crypto_provider();
+        install_crypto_provider();
         let base = normalize_base_url(base_url)?;
         let http = reqwest::Client::builder()
             .timeout(PING_TIMEOUT)

@@ -26,6 +26,6 @@ mod client;
 mod error;
 mod url;
 
-pub use client::{FreqtradeClient, DEFAULT_TIMEOUT, PING_TIMEOUT};
+pub use client::{install_crypto_provider, FreqtradeClient, DEFAULT_TIMEOUT, PING_TIMEOUT};
 pub use error::{ClientError, Result};
 pub use url::{normalize_base_url, API_PREFIX};

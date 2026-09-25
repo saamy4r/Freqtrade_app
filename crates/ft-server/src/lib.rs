@@ -32,8 +32,11 @@ use tower_http::trace::TraceLayer;
 
 use ft_store::Store;
 
+// Re-exported so an embedding app can install it without depending on
+// ft-client directly.
 pub use error::{ApiError, ApiResult};
 pub use fetch::ttl;
+pub use ft_client::install_crypto_provider;
 pub use routes::settings::ACTIVE_BOT;
 pub use state::AppState;
 

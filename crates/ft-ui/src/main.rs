@@ -33,6 +33,11 @@ fn main() {
 /// after this line leaves a note for the next launch to display.
 #[cfg(feature = "embedded-server")]
 fn start_embedded() {
+    // Before any HTTP client exists. Cargo unifies features, so this crate's
+    // reqwest carries rustls even though it only ever talks to loopback over
+    // plain HTTP — and building a client without a provider panics.
+    ft_server::install_crypto_provider();
+
     let data_dir = match ft_ui::backend::data_dir() {
         Ok(dir) => dir,
         Err(e) => {
