@@ -3,20 +3,28 @@
 Running list of hazards found while building, so M11 (Android toolchain + first APK)
 is not a surprise. Updated as we go.
 
-## Toolchain not yet present on the dev machine
+## Toolchain (installed at M11)
 
-As of M0 this box has **none** of the Android prerequisites:
+Everything is under `$HOME` — no system packages, no sudo. That was deliberate:
+this machine's pacman setup has a single Omarchy mirror that served a corrupt
+signature for `rustup`, so relying on it for a multi-gigabyte SDK was not
+appealing. `source scripts/android-env.sh` sets it all up.
 
-- No `rustup` — system Rust is Arch's pacman `rust` 1.98, which ships host std only and
-  **cannot** `rustup target add aarch64-linux-android`. Installing rustup is a prerequisite
-  for M11 and needs the user's sudo (or the rustup.rs script into `~/.cargo`, which will
-  shadow `/usr/bin/cargo` — decide deliberately).
-- No JDK (`java`/`javac` absent). Dioxus Android needs JDK 17.
-- No Android SDK, NDK, or `adb`. `ANDROID_HOME` / `ANDROID_NDK_HOME` unset.
+| Piece | Where | How |
+|---|---|---|
+| rustup | `~/.rustup` | pacman `-U` from the package cache (see below) |
+| Rust targets | — | `rustup target add aarch64-linux-android x86_64-linux-android` |
+| JDK 17 | `~/.local/share/jdk17` | Temurin tarball from the Adoptium API |
+| SDK tools | `~/Android/Sdk/cmdline-tools/latest` | `commandlinetools-linux-*.zip` from dl.google.com |
+| Platform, build-tools, NDK | `~/Android/Sdk` | `sdkmanager --install` |
 
-Present and usable: `cmake`, `ninja`, `unzip`.
+Versions in use: JDK 17.0.20.1 (Temurin), platform `android-35`, build-tools
+`35.0.0`, NDK `27.2.12479018`.
 
-M0–M10 are all verifiable in a desktop browser and do not need any of the above.
+rustup itself was the one piece that needed root, and the mirror would not serve
+its signature. It was installed from the already-cached package instead:
+`sudo pacman -U /var/cache/pacman/pkg/rustup-*.pkg.tar.zst`, which works because
+`pacman.conf` has `LocalFileSigLevel = Optional`.
 
 ## TLS stack
 
@@ -84,3 +92,30 @@ inside the future it returns. Two rules follow, and both were violated in M5:
   outside never re-triggers the resource.
 - Never read a signal inside the `async` block if the resource's own completion
   can change it. That subscribes the resource to itself and it restarts forever.
+
+## First APK (M11)
+
+Built with `scripts/build-apk.sh`. Release, arm64:
+
+| | size |
+|---|---|
+| Flutter APK v1.0.0 | 50 MB |
+| Rust APK (release, `aarch64`) | **9.5 MB** |
+
+Inside the 9.5 MB: `lib/arm64-v8a/libmain.so` is 7.9 MB and contains the whole
+application — UI, embedded Axum server, SQLite, rustls, AES-GCM — plus 12 MB of
+`classes*.dex` before compression. No Flutter engine, and the WebView is
+supplied by the system rather than bundled.
+
+Two things to know when building:
+
+- `dx build --platform android` defaults to **x86_64** (the emulator). Pass
+  `--target aarch64-linux-android` for a real phone, or the APK will install
+  and then fail to start.
+- The release APK is still written to a path ending `apk/debug/app-debug.apk`.
+  That is dx's gradle scaffold naming, not a debug build; the contents differ
+  (9.5 MB release vs 106 MB debug, whose unstripped `.so` alone is 385 MB).
+
+The M0 dependency choices all held up under cross-compilation, first try:
+`rusqlite` with bundled SQLite C, `ring` rather than `aws-lc-rs`, and `aes-gcm`
+instead of SQLCipher. None of them needed NDK coaxing.
