@@ -938,6 +938,52 @@ async fn a_bot_discovered_offline_stays_flagged_even_from_a_fresh_cache() {
 }
 
 #[tokio::test]
+async fn a_cold_start_with_a_dead_bot_still_serves_every_cached_screen() {
+    // The case a phone actually hits: the app is reopened after the bot has
+    // gone down, so nothing is logged in yet. Logging in is a network call and
+    // fails first, which used to surface as 503 on whichever screen was asked
+    // for first — the Open Trades tab, the one the app opens on.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    let id = add_bot(&h, &server).await;
+
+    // Use the app normally so there is something cached.
+    for screen in ["overview", "closed", "dashboard", "config", "logs"] {
+        assert!(h
+            .get(&format!("/api/bots/{id}/{screen}"))
+            .await
+            .status
+            .is_success());
+    }
+
+    // The bot goes away, and the client cache is dropped as it would be by a
+    // restart, so the next request has to log in from scratch.
+    server.shutdown().await;
+    h.state.forget_client(&id).await;
+
+    for screen in ["overview", "closed", "dashboard", "config", "logs"] {
+        let response = h.get(&format!("/api/bots/{id}/{screen}")).await;
+        assert!(
+            response.status.is_success(),
+            "{screen} failed on the first request after a cold start: {} {}",
+            response.status,
+            String::from_utf8_lossy(&response.bytes)
+        );
+        let envelope: serde_json::Value = response.json();
+        assert_eq!(
+            envelope["stale"], true,
+            "{screen} should report itself stale"
+        );
+    }
+
+    // And the data is really there, not an empty shell.
+    let overview: Envelope<Overview> = h.get(&format!("/api/bots/{id}/overview")).await.json();
+    assert_eq!(overview.data.open_trades.len(), 1);
+    let closed: Envelope<ClosedTrades> = h.get(&format!("/api/bots/{id}/closed")).await.json();
+    assert_eq!(closed.data.total, 3);
+}
+
+#[tokio::test]
 async fn health_needs_no_bot() {
     let h = Harness::new();
     assert!(h.get("/api/health").await.status.is_success());

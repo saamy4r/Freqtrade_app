@@ -99,6 +99,21 @@ async fn refresh_bot(state: &AppState, bot_id: &str) -> bool {
         Err(e) => tracing::debug!(error = %e, "background profit refresh failed"),
     }
 
+    // Config, whitelist and logs change slowly and have long TTLs, so the
+    // foreground rarely refetches them. Warming them here is what makes a
+    // screen work offline that the user has never opened while the bot was up
+    // — otherwise the Chart and Logs tabs have nothing to show on a phone that
+    // went out of signal before they were first visited.
+    if let Ok(config) = client.show_config().await {
+        let _ = store.put_snapshot(bot_id, kind::CONFIG, &config);
+    }
+    if let Ok(whitelist) = client.whitelist().await {
+        let _ = store.put_snapshot(bot_id, kind::WHITELIST, &whitelist);
+    }
+    if let Ok(logs) = client.logs(500).await {
+        let _ = store.put_snapshot(bot_id, kind::LOGS, &logs);
+    }
+
     // One cheap call reveals whether any trade has closed since last time; the
     // incremental plan then fetches only those.
     match client.closed_trades(1, 0).await {

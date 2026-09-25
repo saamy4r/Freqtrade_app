@@ -107,6 +107,42 @@ pub fn offline_cache<T: serde::de::DeserializeOwned>(
     }
 }
 
+/// Obtains a client, or `None` when the bot cannot be reached.
+///
+/// Logging in is itself a network call, so a dead bot fails here — before any
+/// cache is consulted. Reporting that as `None` rather than an error lets the
+/// caller serve what it has, which is the whole point of keeping a cache.
+pub async fn client_or_offline(
+    state: &AppState,
+    bot_id: &str,
+) -> ApiResult<Option<ft_client::FreqtradeClient>> {
+    match state.client(bot_id).await {
+        Ok(client) => Ok(Some(client)),
+        Err(ApiError::Client(e)) if e.is_offline() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Cached data, or an honest error when there is none.
+///
+/// Unlike [`offline_cache`] this does not ask whether the bot is known to be
+/// down — the caller has just found out for itself.
+pub fn cached_only<T: serde::de::DeserializeOwned>(
+    state: &AppState,
+    bot_id: &str,
+    kind: &str,
+    what: &'static str,
+) -> ApiResult<Fetched<T>> {
+    match state.store().snapshot::<T>(bot_id, kind)? {
+        Some(hit) => Ok(Fetched {
+            value: hit.value,
+            fetched_at: Some(hit.fetched_at),
+            stale: true,
+        }),
+        None => Err(ApiError::NoCache { what }),
+    }
+}
+
 /// A value plus where it came from.
 pub struct Fetched<T> {
     pub value: T,

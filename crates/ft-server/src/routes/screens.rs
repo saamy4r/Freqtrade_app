@@ -91,7 +91,9 @@ async fn load_config(
     if let Some(cached) = fetch::offline_cache(state, bot_id, kind::CONFIG, "configuration")? {
         return Ok(cached);
     }
-    let client = state.client(bot_id).await?;
+    let Some(client) = fetch::client_or_offline(state, bot_id).await? else {
+        return fetch::cached_only(state, bot_id, kind::CONFIG, "configuration");
+    };
     fetch::snapshot(
         state,
         bot_id,
@@ -111,7 +113,9 @@ async fn load_balance(
     if let Some(cached) = fetch::offline_cache(state, bot_id, kind::BALANCE, "balance")? {
         return Ok(cached);
     }
-    let client = state.client(bot_id).await?;
+    let Some(client) = fetch::client_or_offline(state, bot_id).await? else {
+        return fetch::cached_only(state, bot_id, kind::BALANCE, "balance");
+    };
     fetch::snapshot(
         state,
         bot_id,
@@ -131,7 +135,9 @@ async fn load_profit(
     if let Some(cached) = fetch::offline_cache(state, bot_id, kind::PROFIT, "profit summary")? {
         return Ok(cached);
     }
-    let client = state.client(bot_id).await?;
+    let Some(client) = fetch::client_or_offline(state, bot_id).await? else {
+        return fetch::cached_only(state, bot_id, kind::PROFIT, "profit summary");
+    };
     fetch::snapshot(
         state,
         bot_id,
@@ -171,7 +177,18 @@ async fn load_open_trades(
         };
     }
 
-    let client = state.client(bot_id).await?;
+    let Some(client) = fetch::client_or_offline(state, bot_id).await? else {
+        return match mark {
+            Some(hit) => Ok(fetch::Fetched {
+                value: store.open_trades(bot_id)?,
+                fetched_at: Some(hit.fetched_at),
+                stale: true,
+            }),
+            None => Err(ApiError::NoCache {
+                what: "open trades",
+            }),
+        };
+    };
 
     // The mark records when open trades were last synced; the trades
     // themselves live in their own table, so there is nothing to cache twice.
