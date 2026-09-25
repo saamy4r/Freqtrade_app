@@ -119,3 +119,53 @@ Two things to know when building:
 The M0 dependency choices all held up under cross-compilation, first try:
 `rusqlite` with bundled SQLite C, `ring` rather than `aws-lc-rs`, and `aes-gcm`
 instead of SQLCipher. None of them needed NDK coaxing.
+
+## Emulator
+
+`avdmanager` and the emulator disagree about where AVDs live. The command line
+tools from 2023 cannot read the android-35 package metadata at all — they fail
+with "This version only understands SDK XML versions up to 3 but an SDK XML
+file of version 4 was encountered", and silently list no system images, so AVD
+creation appears to succeed and produces nothing.
+
+After `sdkmanager --install "cmdline-tools;latest"` (installed alongside the
+old one as `latest-2`, so swap it into place), a newer `avdmanager` works — but
+writes the AVD to `$XDG_CONFIG_HOME/.android/avd` while the emulator only looks
+in `~/.android/avd`. Move `ft-test.avd` and `ft-test.ini` there and fix the
+absolute `path=` inside the `.ini`.
+
+Running it:
+
+```
+emulator -avd ft-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect
+adb install -r <x86_64 apk>        # the emulator is x86_64, not arm64
+adb logcat -s freqtrade:V RustPanic:V
+```
+
+A release build is not debuggable, so `adb shell run-as` cannot read its files.
+To drive the app instead, forward its embedded server — the port is in the log —
+and talk to the API directly:
+
+```
+adb forward tcp:9100 tcp:<port>
+curl http://127.0.0.1:9100/api/bots
+```
+
+From inside the emulator, the host machine is `10.0.2.2`.
+
+## Credential key storage
+
+The database key is wrapped by a non-exportable AES key in the Android
+Keystore; only ciphertext reaches disk, and on most phones the wrapping key
+lives in a secure element. Verified on Android 15: the key survives a
+force-stop, and a stored bot password still decrypts on the next launch.
+
+An existing plaintext key (`ft.db.key`, what desktop still uses) is migrated
+into the keystore on first run and then deleted, so upgrading does not lose
+saved bots. `FileKey::beside` has a test pinning that filename, because the
+migration looks for it by name.
+
+If the keystore is unavailable the app falls back to the file-based key — but
+only when no wrapped key exists yet. Falling back after a successful wrap would
+generate a different key and strand every saved credential, so that case is a
+hard error instead.

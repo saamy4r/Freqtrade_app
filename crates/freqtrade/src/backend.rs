@@ -11,6 +11,39 @@ use std::sync::Arc;
 
 use ft_store::{FileKey, Store};
 
+/// Opens the store with the strongest key storage the platform offers.
+///
+/// On Android the key is wrapped by a non-exportable key in the platform
+/// keystore, so what reaches disk is only ciphertext. A device whose keystore
+/// refuses to co-operate falls back to the file-based key rather than leaving
+/// the app unusable — but only when there is no wrapped key already, because
+/// falling back after a successful wrap would generate a different key and
+/// make every saved credential undecryptable.
+fn open_store(db_path: &std::path::Path) -> Result<Store, String> {
+    #[cfg(target_os = "android")]
+    {
+        let data_dir = db_path.parent().unwrap_or(std::path::Path::new("."));
+        let keystore = crate::keystore::AndroidKeystore::new(data_dir);
+        match Store::open(db_path, &keystore) {
+            Ok(store) => {
+                tracing::info!("credential key is held by the Android Keystore");
+                return Ok(store);
+            }
+            Err(e) if data_dir.join("db.key.enc").exists() => {
+                // A wrapped key exists but could not be used. Falling back
+                // would silently strand every saved credential.
+                return Err(format!(
+                    "the credential key could not be unwrapped: {e}. \
+                     Remove the app's data to start over."
+                ));
+            }
+            Err(e) => tracing::warn!(error = %e, "keystore unavailable, using a file-based key"),
+        }
+    }
+
+    Store::open(db_path, &FileKey::beside(db_path)).map_err(|e| format!("{e}"))
+}
+
 /// Starts the embedded server and returns the port it bound.
 ///
 /// Blocks until the socket is listening: the UI cannot ask for anything before
@@ -31,7 +64,7 @@ pub fn start(db_path: PathBuf) -> Result<u16, String> {
                 }
             };
             runtime.block_on(async move {
-                let store = match Store::open(&db_path, &FileKey::beside(&db_path)) {
+                let store = match open_store(&db_path) {
                     Ok(store) => Arc::new(store),
                     Err(e) => {
                         let _ = tx.send(Err(format!("could not open the database: {e}")));

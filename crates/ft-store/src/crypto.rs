@@ -34,7 +34,7 @@ pub trait KeyProvider: Send + Sync {
 /// Key held in a 0600 file, created on first use. The desktop implementation.
 #[derive(Debug, Clone)]
 pub struct FileKey {
-    path: PathBuf,
+    pub(crate) path: PathBuf,
 }
 
 impl FileKey {
@@ -236,6 +236,19 @@ mod tests {
             let mode = std::fs::metadata(&key_path).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600, "key file is world-readable");
         }
+    }
+
+    #[test]
+    fn the_key_file_sits_beside_the_database_with_a_known_name() {
+        // Android migrates an existing plaintext key into the platform
+        // keystore by looking for exactly this filename. Renaming it here
+        // without updating that lookup would silently generate a fresh key on
+        // upgrade and strand every saved credential.
+        let path = std::path::Path::new("/data/user/0/app/files/ft.db");
+        assert_eq!(
+            FileKey::beside(path).path,
+            std::path::PathBuf::from("/data/user/0/app/files/ft.db.key")
+        );
     }
 
     #[test]

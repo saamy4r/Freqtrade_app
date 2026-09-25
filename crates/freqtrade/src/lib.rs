@@ -11,6 +11,7 @@ pub mod backend;
 pub mod components;
 pub mod events;
 pub mod format;
+pub mod keystore;
 pub mod logging;
 pub mod screens;
 pub mod state;
