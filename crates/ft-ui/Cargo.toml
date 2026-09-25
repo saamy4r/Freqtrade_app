@@ -10,6 +10,7 @@ serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 dioxus = { version = "0.7", features = ["router"] }
+tracing.workspace = true
 futures-channel = "0.3"
 futures-util = "0.3"
 # reqwest builds for wasm32 on top of fetch, so one client serves the browser
@@ -33,6 +34,11 @@ wasm-bindgen = "0.2"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-context = "0.1"
+# Nothing written to stdout survives on Android, so a crash is silent unless it
+# is routed to logcat explicitly.
+android_logger = "0.14"
+log = "0.4"
+tracing-subscriber = { workspace = true }
 
 [features]
 default = []

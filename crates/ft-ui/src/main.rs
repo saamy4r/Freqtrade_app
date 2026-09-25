@@ -5,6 +5,9 @@
 //! runs in-process on loopback and the UI is pointed at the port it chose.
 
 fn main() {
+    // First, so that anything failing after this point says so.
+    ft_ui::logging::init();
+
     #[cfg(feature = "embedded-server")]
     start_embedded();
 
@@ -33,9 +36,11 @@ fn start_embedded() {
         panic!("could not find a writable directory for the database: {e}");
     });
     let db_path = data_dir.join("ft.db");
+    tracing::info!(path = %db_path.display(), "opening database");
 
     let port = ft_ui::backend::start(db_path)
         .unwrap_or_else(|e| panic!("could not start the embedded server: {e}"));
+    tracing::info!(port, "embedded server listening");
 
     // The port is chosen by the OS at bind time, so this cannot be a constant
     // and must be set before anything renders.
