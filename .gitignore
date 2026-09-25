@@ -21,3 +21,9 @@ key.properties
 
 # Real responses captured from a live bot (scripts/capture-fixtures.sh)
 crates/ft-types/tests/fixtures/live/
+
+# Release signing material lives outside the repo (~/.config/freqtrade);
+# these patterns are a backstop against ever committing a copy.
+*.jks
+*.keystore
+*.password
