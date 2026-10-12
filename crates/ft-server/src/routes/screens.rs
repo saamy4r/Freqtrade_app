@@ -237,8 +237,8 @@ async fn load_open_trades(
 /// Brings closed trades up to date using the incremental window, then reads
 /// them back from the store.
 ///
-/// The sync fetches only what is new. `/trades` returns oldest-first, so the
-/// offset is simply how many we already hold — see `ft_store::SyncPlan`.
+/// The sync fetches only the tail of the bot's list that holds what is new —
+/// see `crate::sync::catch_up_closed`.
 async fn sync_closed_trades(
     state: &AppState,
     bot_id: &str,
@@ -268,8 +268,7 @@ async fn sync_closed_trades(
         }
     }
 
-    // One cheap call tells us the bot's total; the plan turns that into the
-    // smallest window that closes the gap.
+    // One cheap call tells us the bot's total; the catch-up closes the gap.
     let probe = match client.closed_trades(1, 0).await {
         Ok(probe) => probe,
         Err(e) if e.is_offline() => {
@@ -283,22 +282,7 @@ async fn sync_closed_trades(
     };
 
     let remote_total = probe.total_trades.max(0) as u32;
-    match store.sync_plan(bot_id, remote_total)? {
-        ft_store::SyncPlan::UpToDate => {}
-        ft_store::SyncPlan::FullResync { total } => {
-            tracing::info!(
-                bot_id,
-                total,
-                "remote shrank; resyncing trades from scratch"
-            );
-            store.clear_trades(bot_id)?;
-            fetch_closed_window(&client, store, bot_id, 0, total).await?;
-        }
-        ft_store::SyncPlan::Fetch { offset, limit } => {
-            tracing::debug!(bot_id, offset, limit, "incremental trade sync");
-            fetch_closed_window(&client, store, bot_id, offset, limit).await?;
-        }
-    }
+    crate::sync::catch_up_closed(&client, store, bot_id, remote_total).await?;
 
     store.put_snapshot(bot_id, kind::CLOSED_MARK, &())?;
     Ok(fetch::Fetched {
@@ -306,33 +290,6 @@ async fn sync_closed_trades(
         fetched_at: Some(fetch::now()),
         stale: false,
     })
-}
-
-/// Pulls a window of closed trades in pages, so a first sync of a bot with
-/// thousands of trades does not become one enormous request.
-async fn fetch_closed_window(
-    client: &ft_client::FreqtradeClient,
-    store: &ft_store::Store,
-    bot_id: &str,
-    offset: u32,
-    count: u32,
-) -> ApiResult<()> {
-    const PAGE: u32 = 500;
-    let mut fetched = 0;
-    while fetched < count {
-        let take = PAGE.min(count - fetched);
-        let page = client.closed_trades(take, offset + fetched).await?;
-        if page.trades.is_empty() {
-            break;
-        }
-        let received = page.trades.len() as u32;
-        store.upsert_trades(bot_id, &page.trades)?;
-        fetched += received;
-        if received < take {
-            break;
-        }
-    }
-    Ok(())
 }
 
 /// `GET /api/bots/:id/overview` — the Open Trades screen.

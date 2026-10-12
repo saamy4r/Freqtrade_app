@@ -247,8 +247,15 @@ fn trade(id: i64, close_ts: i64, profit: f64) -> serde_json::Value {
 }
 
 async fn mount_trades(server: &MockServer, total: i64) {
-    let all: Vec<_> = (1..=total)
-        .map(|i| trade(i, 1_789_000_000 + i * 1000, i as f64))
+    mount_trade_ids(server, &(1..=total).collect::<Vec<_>>()).await;
+}
+
+/// Serves `/trades` holding exactly these closed trade ids, in id order as
+/// Freqtrade does.
+async fn mount_trade_ids(server: &MockServer, ids: &[i64]) {
+    let all: Vec<_> = ids
+        .iter()
+        .map(|&i| trade(i, 1_789_000_000 + i * 1000, i as f64))
         .collect();
     Mock::given(method("GET"))
         .and(path("/api/v1/trades"))
@@ -619,6 +626,59 @@ async fn closed_trades_sync_incrementally_rather_than_refetching() {
             .any(|(offset, limit)| offset.as_deref() == Some("3") && limit.as_deref() == Some("2")),
         "expected an incremental fetch of offset=3 limit=2, got {trade_requests:?}"
     );
+}
+
+#[tokio::test]
+async fn a_trade_that_closes_out_of_id_order_is_not_skipped() {
+    // Trade 3 stays open while 4 closes, then closes itself. /trades is in id
+    // order, so 3 lands *before* 4: fetching offset=local (3) would re-read 4
+    // and never see 3. This is what the live bot did with trades 13 and 14.
+    let h = Harness::new();
+    let server = mock_bot().await;
+    server.reset().await;
+    mount_auth(&server).await;
+    mount(
+        &server,
+        "/api/v1/balance",
+        serde_json::json!({"total": 1198.90, "stake": "USDT"}),
+    )
+    .await;
+    mount(
+        &server,
+        "/api/v1/profit",
+        serde_json::json!({"profit_closed_coin": 193.6703}),
+    )
+    .await;
+    mount_trade_ids(&server, &[1, 2, 4]).await;
+    let id = add_bot(&h, &server).await;
+
+    let first: Envelope<ClosedTrades> = h.get(&format!("/api/bots/{id}/closed")).await.json();
+    assert_eq!(first.data.total, 3);
+
+    server.reset().await;
+    mount_auth(&server).await;
+    mount(
+        &server,
+        "/api/v1/balance",
+        serde_json::json!({"total": 1198.90, "stake": "USDT"}),
+    )
+    .await;
+    mount(
+        &server,
+        "/api/v1/profit",
+        serde_json::json!({"profit_closed_coin": 193.6703}),
+    )
+    .await;
+    mount_trade_ids(&server, &[1, 2, 3, 4]).await;
+
+    let second: Envelope<ClosedTrades> = h
+        .get(&format!("/api/bots/{id}/closed?refresh=true"))
+        .await
+        .json();
+    let mut ids: Vec<_> = second.data.trades.iter().map(|t| t.trade_id).collect();
+    ids.sort();
+    assert_eq!(ids, [1, 2, 3, 4]);
+    assert_eq!(second.data.total, 4);
 }
 
 #[tokio::test]

@@ -41,17 +41,20 @@ impl<T> Cached<T> {
 
 /// What a closed-trade sync needs to fetch.
 ///
-/// `/trades` returns the *oldest* first (verified against a live bot:
-/// `offset=0` yields trade ids 1..50), so new trades land at the end and
-/// `offset = what we already have` fetches exactly the new ones. The Flutter
-/// app always asked for `limit=500&offset=0`, which silently returns the
-/// oldest 500 — it worked only because that bot had fewer than 500 trades.
+/// `/trades` returns closed trades ordered by trade *id* (verified against a
+/// live bot: `offset=0` yields the lowest ids). Trades do not close in id
+/// order, though: a long-running trade opened early closes after younger ones,
+/// and its row lands in the middle of the list, not at the end. So the local
+/// count is *not* a safe offset — fetching `offset = local` re-reads a trade we
+/// already hold and skips the one that closed. The sync instead walks back
+/// from the end of the list until the counts agree; see
+/// `ft_server::sync::catch_up_closed`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncPlan {
     /// Local count matches the bot's; nothing to do.
     UpToDate,
-    /// Fetch this window and upsert it.
-    Fetch { offset: u32, limit: u32 },
+    /// The bot holds this many closed trades we do not.
+    Fetch { missing: u32 },
     /// The bot reports fewer trades than we hold, so its database was reset or
     /// trades were deleted. Our ids no longer mean what they meant; drop the
     /// local set and refetch.

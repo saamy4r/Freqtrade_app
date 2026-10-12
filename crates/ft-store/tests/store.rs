@@ -301,30 +301,15 @@ fn a_trade_that_closes_moves_from_open_to_closed() {
 
 #[test]
 fn the_sync_window_fetches_only_new_trades() {
-    // /trades returns oldest first (verified live: offset=0 gives ids 1..50),
-    // so new trades land at the end and offset = local count.
-    assert_eq!(
-        plan_sync(0, 327),
-        SyncPlan::Fetch {
-            offset: 0,
-            limit: 327
-        }
-    );
+    assert_eq!(plan_sync(0, 327), SyncPlan::Fetch { missing: 327 });
     assert_eq!(plan_sync(327, 327), SyncPlan::UpToDate);
-    assert_eq!(
-        plan_sync(327, 329),
-        SyncPlan::Fetch {
-            offset: 327,
-            limit: 2
-        }
-    );
+    assert_eq!(plan_sync(327, 329), SyncPlan::Fetch { missing: 2 });
 }
 
 #[test]
 fn a_shrinking_remote_triggers_a_full_resync() {
-    // The bot's database was reset or trades were deleted, so our ids no
-    // longer line up with its offsets; fetching from offset=local would skip
-    // real trades or duplicate them.
+    // The bot's database was reset or trades were deleted, so what we hold
+    // may no longer be what it holds.
     assert_eq!(plan_sync(327, 10), SyncPlan::FullResync { total: 10 });
     assert_eq!(plan_sync(1, 0), SyncPlan::FullResync { total: 0 });
 }
@@ -335,10 +320,7 @@ fn sync_plan_reads_the_live_local_count() {
     let bot = store.add_bot(new_bot("alpha")).unwrap();
     assert_eq!(
         store.sync_plan(&bot.id, 327).unwrap(),
-        SyncPlan::Fetch {
-            offset: 0,
-            limit: 327
-        }
+        SyncPlan::Fetch { missing: 327 }
     );
 
     // Simulate the first full sync of the live bot's 327 trades.
@@ -349,10 +331,7 @@ fn sync_plan_reads_the_live_local_count() {
     // Two new trades close: the old app would have re-fetched 500 rows.
     assert_eq!(
         store.sync_plan(&bot.id, 329).unwrap(),
-        SyncPlan::Fetch {
-            offset: 327,
-            limit: 2
-        }
+        SyncPlan::Fetch { missing: 2 }
     );
 
     store.clear_trades(&bot.id).unwrap();

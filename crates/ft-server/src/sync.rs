@@ -4,11 +4,11 @@
 //! the app is open. A timer that keeps waking the radio to poll a bot nobody
 //! is looking at is exactly the behaviour that makes a phone app feel heavy.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use ft_store::kind;
 
+use crate::error::ApiResult;
 use crate::events::ServerEvent;
 use crate::state::AppState;
 
@@ -114,19 +114,13 @@ async fn refresh_bot(state: &AppState, bot_id: &str) -> bool {
         let _ = store.put_snapshot(bot_id, kind::LOGS, &logs);
     }
 
-    // One cheap call reveals whether any trade has closed since last time; the
-    // incremental plan then fetches only those.
+    // One cheap call reveals whether any trade has closed since last time;
+    // the catch-up then fetches only the tail of the list that holds them.
     match client.closed_trades(1, 0).await {
         Ok(probe) => {
             let remote = probe.total_trades.max(0) as u32;
-            match store.sync_plan(bot_id, remote) {
-                Ok(ft_store::SyncPlan::UpToDate) => {}
-                Ok(plan) => {
-                    if let Err(e) = apply_plan(&client, store, bot_id, plan).await {
-                        tracing::warn!(error = %e, "background trade sync failed");
-                    }
-                }
-                Err(e) => tracing::warn!(error = %e, "could not plan a trade sync"),
+            if let Err(e) = catch_up_closed(&client, store, bot_id, remote).await {
+                tracing::warn!(error = %e, "background trade sync failed");
             }
             let _ = store.put_snapshot(bot_id, kind::CLOSED_MARK, &());
         }
@@ -137,24 +131,47 @@ async fn refresh_bot(state: &AppState, bot_id: &str) -> bool {
     false
 }
 
-async fn apply_plan(
+/// Most trades one `/trades` request may return.
+const PAGE: u32 = 500;
+
+/// Brings the stored closed trades level with a bot that reports
+/// `remote_total` of them.
+///
+/// `/trades` is ordered by trade id, and a trade that stayed open a long time
+/// closes into the middle of that list rather than at its end (see
+/// `ft_store::SyncPlan`). So this reads windows that end at the tail of the
+/// list, each twice the size of the last, until the local count reaches the
+/// bot's. The common case — a trade or two just closed — is still a single
+/// small request; a long-held trade costs a few more.
+pub(crate) async fn catch_up_closed(
     client: &ft_client::FreqtradeClient,
-    store: &Arc<ft_store::Store>,
+    store: &ft_store::Store,
     bot_id: &str,
-    plan: ft_store::SyncPlan,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let (offset, limit) = match plan {
+    remote_total: u32,
+) -> ApiResult<()> {
+    let mut window = match store.sync_plan(bot_id, remote_total)? {
         ft_store::SyncPlan::UpToDate => return Ok(()),
-        ft_store::SyncPlan::Fetch { offset, limit } => (offset, limit),
         ft_store::SyncPlan::FullResync { total } => {
+            tracing::info!(bot_id, total, "remote shrank; resyncing trades from scratch");
             store.clear_trades(bot_id)?;
-            (0, total)
+            total
         }
+        ft_store::SyncPlan::Fetch { missing } => missing,
     };
-    if limit == 0 {
-        return Ok(());
+
+    // Everything at or past `end` has been read in this sync.
+    let mut end = remote_total;
+    while end > 0 && store.closed_trade_count(bot_id)? < remote_total {
+        let take = window.clamp(1, PAGE).min(end);
+        let start = end - take;
+        tracing::debug!(bot_id, offset = start, limit = take, "closed trade sync");
+        let page = client.closed_trades(take, start).await?;
+        if page.trades.is_empty() {
+            break;
+        }
+        store.upsert_trades(bot_id, &page.trades)?;
+        end = start;
+        window = window.saturating_mul(2);
     }
-    let page = client.closed_trades(limit.min(500), offset).await?;
-    store.upsert_trades(bot_id, &page.trades)?;
     Ok(())
 }

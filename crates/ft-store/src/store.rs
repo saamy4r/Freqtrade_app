@@ -342,7 +342,7 @@ impl Store {
 
     /// Works out the smallest fetch that brings closed trades up to date.
     ///
-    /// See [`SyncPlan`] for why `offset` is the local count.
+    /// See [`SyncPlan`] for why this is a count rather than an offset.
     pub fn sync_plan(&self, bot_id: &str, remote_total: u32) -> Result<SyncPlan> {
         let local = self.closed_trade_count(bot_id)?;
         Ok(plan_sync(local, remote_total))
@@ -576,8 +576,7 @@ pub fn plan_sync(local: u32, remote_total: u32) -> SyncPlan {
         SyncPlan::UpToDate
     } else {
         SyncPlan::Fetch {
-            offset: local,
-            limit: remote_total - local,
+            missing: remote_total - local,
         }
     }
 }
