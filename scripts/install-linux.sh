@@ -34,7 +34,9 @@ fi
 if [ $# -ge 1 ]; then
   STAGE=$(mktemp -d)
   tar -xzf "$1" -C "$STAGE"
-  SRC=$(find "$STAGE" -name "$APP" -type f -perm -u+x | head -1)
+  # The release tarball ships the binary as `freqtrade`.
+  SRC=$(find "$STAGE" \( -name freqtrade -o -name "$APP" \) -type f -perm -u+x | head -1)
+  [ -n "$SRC" ] || { echo "no binary in $1" >&2; exit 1; }
   SRC=$(dirname "$SRC")
 else
   SRC="$ROOT/target/dx/freqtrade/release/linux/app"
