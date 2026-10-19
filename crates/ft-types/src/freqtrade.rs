@@ -525,19 +525,57 @@ impl PairCandles {
 // ---------------------------------------------------------------------------
 
 /// Body of `POST /forceexit`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ForceExitRequest {
     /// Freqtrade accepts the trade id as a string here.
     pub tradeid: String,
     pub ordertype: String,
+    /// Base-currency amount to sell. Absent means the whole position; less
+    /// than the trade's amount makes Freqtrade place a partial exit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
 }
 
 impl ForceExitRequest {
-    /// A limit exit at the current bid, which is the only variant the UI offers.
-    pub fn limit(trade_id: i64) -> Self {
+    /// A limit exit at the current bid, which is the only order type the UI
+    /// offers. `amount` of `None` closes the whole trade.
+    pub fn limit(trade_id: i64, amount: Option<f64>) -> Self {
         Self {
             tradeid: trade_id.to_string(),
             ordertype: "limit".to_owned(),
+            amount,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Force enter
+// ---------------------------------------------------------------------------
+
+/// Body of `POST /forceenter`.
+///
+/// On a pair with an open trade this adds to that trade rather than opening a
+/// second one, which is how the UI does a manual DCA. Freqtrade only allows
+/// that with `position_adjustment_enable`, and the endpoint itself needs
+/// `force_entry_enable`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ForceEnterRequest {
+    pub pair: String,
+    /// `"long"` or `"short"`.
+    pub side: String,
+    pub ordertype: String,
+    /// In stake currency. For futures this is margin, at the trade's leverage.
+    pub stakeamount: f64,
+}
+
+impl ForceEnterRequest {
+    /// A limit entry at Freqtrade's configured entry price.
+    pub fn limit(pair: &str, is_short: bool, stake_amount: f64) -> Self {
+        Self {
+            pair: pair.to_owned(),
+            side: if is_short { "short" } else { "long" }.to_owned(),
+            ordertype: "limit".to_owned(),
+            stakeamount: stake_amount,
         }
     }
 }

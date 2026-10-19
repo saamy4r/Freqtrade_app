@@ -36,6 +36,8 @@ pub fn TradeCard(
     currency: String,
     /// Shown only for open trades, and only when the bot is reachable.
     on_exit: Option<EventHandler<Trade>>,
+    /// Manual DCA. Same visibility rules as `on_exit`.
+    on_add: Option<EventHandler<Trade>>,
 ) -> Element {
     let tone = Tone::of(trade.profit_ratio);
     let is_open = trade.is_open;
@@ -48,6 +50,7 @@ pub fn TradeCard(
     // The exit handler needs its own copy; everything above is read from the
     // original before it moves into the closure.
     let for_exit = trade.clone();
+    let for_add = trade.clone();
 
     // Open trades compare against the live rate; closed ones against the exit.
     let (rate_label, rate_value) = if is_open {
@@ -105,8 +108,17 @@ pub fn TradeCard(
                 if let Some(ms) = closed {
                     span { class: "muted", "· Closed {format::datetime(ms)}" }
                 }
-                if let Some(exit) = on_exit {
+                if on_exit.is_some() || on_add.is_some() {
                     span { class: "trade__spacer" }
+                }
+                if let Some(add) = on_add {
+                    button {
+                        class: "btn btn--small btn--ghost",
+                        onclick: move |_| add.call(for_add.clone()),
+                        "DCA"
+                    }
+                }
+                if let Some(exit) = on_exit {
                     button {
                         class: "btn btn--small btn--danger",
                         onclick: move |_| exit.call(for_exit.clone()),

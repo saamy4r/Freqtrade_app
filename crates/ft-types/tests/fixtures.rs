@@ -269,10 +269,31 @@ fn every_type_degrades_instead_of_failing() {
 
 #[test]
 fn force_exit_builds_a_limit_order() {
-    let body = ForceExitRequest::limit(42);
+    let body = ForceExitRequest::limit(42, None);
     assert_eq!(
         serde_json::to_value(&body).unwrap(),
         serde_json::json!({"tradeid": "42", "ordertype": "limit"}),
+    );
+}
+
+#[test]
+fn partial_exit_carries_the_amount() {
+    let body = ForceExitRequest::limit(42, Some(0.5));
+    assert_eq!(
+        serde_json::to_value(&body).unwrap(),
+        serde_json::json!({"tradeid": "42", "ordertype": "limit", "amount": 0.5}),
+    );
+}
+
+#[test]
+fn force_enter_names_the_side() {
+    let body = ForceEnterRequest::limit("ETH/USDT:USDT", true, 25.0);
+    assert_eq!(
+        serde_json::to_value(&body).unwrap(),
+        serde_json::json!({
+            "pair": "ETH/USDT:USDT", "side": "short",
+            "ordertype": "limit", "stakeamount": 25.0
+        }),
     );
 }
 

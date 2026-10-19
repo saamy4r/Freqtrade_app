@@ -208,10 +208,29 @@ pub async fn candles(id: &str, pair: &str, refresh: bool) -> Result<Envelope<Can
     get(&format!("/bots/{id}/candles?pair={encoded}{suffix}")).await
 }
 
-pub async fn force_exit(id: &str, trade_id: i64) -> Result<ActionResult> {
+/// `amount` is in base currency; `None` exits the whole trade.
+pub async fn force_exit(id: &str, trade_id: i64, amount: Option<f64>) -> Result<ActionResult> {
     post(
         &format!("/bots/{id}/forceexit"),
-        &ft_types::api::ForceExitBody { trade_id },
+        &ft_types::api::ForceExitBody { trade_id, amount },
+    )
+    .await
+}
+
+/// Manual DCA: adds `stake_amount` (stake currency) to the open trade on `pair`.
+pub async fn add_to_trade(
+    id: &str,
+    pair: &str,
+    is_short: bool,
+    stake_amount: f64,
+) -> Result<ActionResult> {
+    post(
+        &format!("/bots/{id}/addtotrade"),
+        &ft_types::api::AddToTradeBody {
+            pair: pair.to_owned(),
+            is_short,
+            stake_amount,
+        },
     )
     .await
 }

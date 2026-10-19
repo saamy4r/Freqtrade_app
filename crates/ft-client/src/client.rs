@@ -426,11 +426,34 @@ impl FreqtradeClient {
 
     /// `POST /forceexit` — places a limit order at the current bid.
     ///
+    /// `amount` (base currency) below the trade's amount is a partial exit;
+    /// `None` exits the whole position.
+    ///
     /// Real money on a live bot; the UI confirms before calling this.
-    pub async fn force_exit(&self, trade_id: i64) -> Result<StatusMessage> {
-        let body = ForceExitRequest::limit(trade_id);
+    pub async fn force_exit(&self, trade_id: i64, amount: Option<f64>) -> Result<StatusMessage> {
+        let body = ForceExitRequest::limit(trade_id, amount);
         self.send(Method::POST, "/forceexit", &[], Some(&body))
             .await
+    }
+
+    /// `POST /forceenter` on a pair that already has an open trade, which
+    /// Freqtrade treats as a position adjustment (DCA) of that trade.
+    ///
+    /// Freqtrade replies with the updated trade on success; nothing here needs
+    /// it, since the caller refetches the open set, so the body is only
+    /// checked for being JSON.
+    ///
+    /// Real money on a live bot; the UI confirms before calling this.
+    pub async fn add_to_trade(
+        &self,
+        pair: &str,
+        is_short: bool,
+        stake_amount: f64,
+    ) -> Result<()> {
+        let body = ForceEnterRequest::limit(pair, is_short, stake_amount);
+        self.send::<serde_json::Value, _>(Method::POST, "/forceenter", &[], Some(&body))
+            .await
+            .map(|_| ())
     }
 }
 

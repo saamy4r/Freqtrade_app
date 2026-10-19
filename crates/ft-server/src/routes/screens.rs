@@ -7,7 +7,7 @@ use serde::Deserialize;
 use ft_store::kind;
 use ft_types::api::{
     ActionResult, Candles, ChartPair, ClosedTrades, CumulativeSeries, Dashboard, Envelope,
-    ForceExitBody, Logs, Overview, TradeOverlay,
+    AddToTradeBody, ForceExitBody, Logs, Overview, TradeOverlay,
 };
 use ft_types::freqtrade::{
     Balance, BotConfig, LogsResponse, ProfitSummary, Trade, WhitelistResponse,
@@ -689,8 +689,8 @@ pub async fn force_exit(
     fetch::revalidate(&state, &bot_id, true).await;
 
     let client = state.client(&bot_id).await?;
-    let result = client.force_exit(body.trade_id).await?;
-    tracing::info!(bot_id, trade_id = body.trade_id, "force exit requested");
+    let result = client.force_exit(body.trade_id, body.amount).await?;
+    tracing::info!(bot_id, trade_id = body.trade_id, amount = ?body.amount, "force exit requested");
 
     // The open set just changed. Drop the freshness mark so the next read
     // refetches, rather than serving a cached list that still shows the trade
@@ -703,6 +703,35 @@ pub async fn force_exit(
         } else {
             result.result
         },
+    }))
+}
+
+/// `POST /api/bots/:id/addtotrade`
+///
+/// Manual DCA: a force entry on a pair with an open trade, which Freqtrade adds
+/// to that trade. Places a real order; the UI confirms first.
+pub async fn add_to_trade(
+    State(state): State<AppState>,
+    Path(bot_id): Path<String>,
+    Json(body): Json<AddToTradeBody>,
+) -> ApiResult<Json<ActionResult>> {
+    if !(body.stake_amount.is_finite() && body.stake_amount > 0.0) {
+        return Err(ApiError::BadRequest("stake amount must be positive".to_owned()));
+    }
+    // Same reasoning as `force_exit`.
+    fetch::revalidate(&state, &bot_id, true).await;
+
+    let client = state.client(&bot_id).await?;
+    client
+        .add_to_trade(&body.pair, body.is_short, body.stake_amount)
+        .await?;
+    tracing::info!(bot_id, pair = body.pair, stake = body.stake_amount, "add to trade requested");
+
+    // The trade's stake and average entry just changed.
+    state.store().clear_snapshot(&bot_id, kind::OPEN_MARK)?;
+
+    Ok(Json(ActionResult {
+        message: "entry order placed".to_owned(),
     }))
 }
 

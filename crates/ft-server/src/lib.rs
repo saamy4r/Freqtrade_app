@@ -91,6 +91,7 @@ pub fn router_from_state(
         .route("/bots/{id}/pairs", get(routes::screens::pairs))
         .route("/bots/{id}/candles", get(routes::screens::candles))
         .route("/bots/{id}/forceexit", post(routes::screens::force_exit))
+        .route("/bots/{id}/addtotrade", post(routes::screens::add_to_trade))
         .route(
             "/settings/{key}",
             get(routes::settings::get).put(routes::settings::put),

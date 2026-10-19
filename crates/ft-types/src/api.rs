@@ -243,6 +243,18 @@ pub struct Logs {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForceExitBody {
     pub trade_id: i64,
+    /// Base-currency amount for a partial exit; `None` exits everything.
+    #[serde(default)]
+    pub amount: Option<f64>,
+}
+
+/// Adds to an open trade (manual DCA).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddToTradeBody {
+    pub pair: String,
+    pub is_short: bool,
+    /// In stake currency.
+    pub stake_amount: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

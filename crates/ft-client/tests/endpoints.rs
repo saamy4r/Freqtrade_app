@@ -121,8 +121,51 @@ async fn force_exit_posts_a_limit_order() {
         .mount(&server)
         .await;
 
-    let result = client.force_exit(42).await.unwrap();
+    let result = client.force_exit(42, None).await.unwrap();
     assert!(result.result.contains("exit order"));
+}
+
+#[tokio::test]
+async fn partial_exit_posts_the_amount() {
+    let server = MockServer::start().await;
+    let client = logged_in(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/api/v1/forceexit"))
+        .and(body_json(serde_json::json!({
+            "tradeid": "42", "ordertype": "limit", "amount": 0.25
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"result": "Created exit order for trade 42."})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client.force_exit(42, Some(0.25)).await.unwrap();
+}
+
+#[tokio::test]
+async fn add_to_trade_posts_a_force_enter() {
+    let server = MockServer::start().await;
+    let client = logged_in(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/api/v1/forceenter"))
+        .and(body_json(serde_json::json!({
+            "pair": "BTC/USDT", "side": "long", "ordertype": "limit", "stakeamount": 50.0
+        })))
+        // Freqtrade answers with the adjusted trade.
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"trade_id": 7, "pair": "BTC/USDT"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client.add_to_trade("BTC/USDT", false, 50.0).await.unwrap();
 }
 
 #[tokio::test]

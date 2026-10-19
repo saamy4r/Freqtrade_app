@@ -343,6 +343,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .exit-preview__row + .exit-preview__row { margin-top: 7px; }
 
+/* Preset sizes for a partial exit or a DCA. */
+.choices { display: flex; gap: 6px; margin-bottom: 12px; }
+.choice {
+  flex: 1; padding: 7px 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.choice--on { border-color: var(--accent); background: var(--accent); color: var(--accent-text); }
+.notice {
+  padding: 11px 13px; border-radius: 10px; margin-bottom: 14px;
+  background: var(--warn-bg); color: var(--warn); font-size: 13px;
+}
+
 /* ---------- chart ----------
    Marks are chosen per mode, not flipped: each was checked against its own
    surface for lightness band, chroma and contrast. */
