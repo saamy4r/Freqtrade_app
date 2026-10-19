@@ -93,6 +93,10 @@ pub fn router_from_state(
         .route("/bots/{id}/forceexit", post(routes::screens::force_exit))
         .route("/bots/{id}/addtotrade", post(routes::screens::add_to_trade))
         .route(
+            "/bots/{id}/trades/{trade_id}/open-order",
+            delete(routes::screens::cancel_open_order),
+        )
+        .route(
             "/settings/{key}",
             get(routes::settings::get).put(routes::settings::put),
         )

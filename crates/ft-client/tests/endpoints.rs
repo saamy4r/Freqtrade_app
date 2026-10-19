@@ -165,7 +165,24 @@ async fn add_to_trade_posts_a_force_enter() {
         .mount(&server)
         .await;
 
-    client.add_to_trade("BTC/USDT", false, 50.0).await.unwrap();
+    client.add_to_trade("BTC/USDT", false, 50.0, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn cancel_open_order_deletes_it() {
+    let server = MockServer::start().await;
+    let client = logged_in(&server).await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/api/v1/trades/7/open-order"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"trade_id": 7})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client.cancel_open_order(7).await.unwrap();
 }
 
 #[tokio::test]

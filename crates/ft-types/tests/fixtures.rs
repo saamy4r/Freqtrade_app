@@ -287,7 +287,7 @@ fn partial_exit_carries_the_amount() {
 
 #[test]
 fn force_enter_names_the_side() {
-    let body = ForceEnterRequest::limit("ETH/USDT:USDT", true, 25.0);
+    let body = ForceEnterRequest::new("ETH/USDT:USDT", true, 25.0, false);
     assert_eq!(
         serde_json::to_value(&body).unwrap(),
         serde_json::json!({
@@ -295,6 +295,24 @@ fn force_enter_names_the_side() {
             "ordertype": "limit", "stakeamount": 25.0
         }),
     );
+    let body = ForceEnterRequest::new("ETH/USDT:USDT", false, 25.0, true);
+    assert_eq!(body.ordertype, "market");
+    assert_eq!(body.side, "long");
+}
+
+#[test]
+fn a_trade_reports_its_pending_order() {
+    let trade: Trade = serde_json::from_value(serde_json::json!({
+        "trade_id": 1, "pair": "LTC/USDT:USDT",
+        "has_open_orders": true, "nr_of_successful_entries": 2
+    }))
+    .unwrap();
+    assert!(trade.has_open_orders);
+    assert_eq!(trade.nr_of_successful_entries, Some(2));
+
+    // Older bots omit both; that must not fail the whole list.
+    let trade: Trade = serde_json::from_value(serde_json::json!({"trade_id": 1})).unwrap();
+    assert!(!trade.has_open_orders);
 }
 
 /// Every type `ft-store` caches must survive its own serialization.

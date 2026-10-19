@@ -223,6 +223,7 @@ pub async fn add_to_trade(
     pair: &str,
     is_short: bool,
     stake_amount: f64,
+    market: bool,
 ) -> Result<ActionResult> {
     post(
         &format!("/bots/{id}/addtotrade"),
@@ -230,9 +231,15 @@ pub async fn add_to_trade(
             pair: pair.to_owned(),
             is_short,
             stake_amount,
+            market,
         },
     )
     .await
+}
+
+/// Cancels a trade's unfilled order, such as a limit DCA still waiting.
+pub async fn cancel_open_order(id: &str, trade_id: i64) -> Result<ActionResult> {
+    send(client().delete(url(&format!("/bots/{id}/trades/{trade_id}/open-order")))).await
 }
 
 /// Percent-encodes a query value.

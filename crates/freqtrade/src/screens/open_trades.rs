@@ -52,6 +52,22 @@ pub fn OpenTrades() -> Element {
 
     let mut exiting = use_signal(|| None::<Trade>);
     let mut adding = use_signal(|| None::<Trade>);
+    // Cancelling a pending order needs no confirmation: it only withdraws an
+    // order that has not filled. The id marks which card shows a spinner.
+    let mut cancelling = use_signal(|| None::<i64>);
+    let mut action_error = use_signal(|| None::<String>);
+    let cancel_order = move |t: Trade| {
+        let Some(bot) = active.peek().clone() else { return };
+        cancelling.set(Some(t.trade_id));
+        action_error.set(None);
+        spawn(async move {
+            if let Err(e) = api::cancel_open_order(&bot, t.trade_id).await {
+                action_error.set(Some(format!("Could not cancel the {} order: {}", t.pair, e.message)));
+            }
+            cancelling.set(None);
+            refresh();
+        });
+    };
     let stake_currency = move || {
         data.read_unchecked()
             .as_ref()
@@ -118,6 +134,10 @@ pub fn OpenTrades() -> Element {
                             }
                         }
 
+                        if let Some(message) = action_error.read().clone() {
+                            div { class: "error", "{message}" }
+                        }
+
                         if trades.is_empty() {
                             div { class: "empty",
                                 div { class: "empty__icon", "💤" }
@@ -139,6 +159,8 @@ pub fn OpenTrades() -> Element {
                                     on_add: (!stale).then_some(EventHandler::new(move |t: Trade| {
                                         adding.set(Some(t));
                                     })),
+                                    on_cancel_order: (!stale).then_some(EventHandler::new(cancel_order)),
+                                    cancelling: *cancelling.read() == Some(trade.trade_id),
                                 }
                             }
                         }
@@ -325,6 +347,9 @@ fn AddDialog(
 
     let current_stake = trade.stake_amount;
     let mut stake = use_signal(move || format!("{:.2}", current_stake));
+    // Market by default: a limit DCA on a short is priced at the ask and can
+    // sit unfilled for as long as the price stays below it.
+    let mut market = use_signal(|| true);
 
     let config = use_resource(move || {
         let id = app.active.peek().clone();
@@ -371,9 +396,10 @@ fn AddDialog(
             error.set(None);
             let bot = app.active.peek().clone();
             let pair = pair.clone();
+            let market = market();
             spawn(async move {
                 let Some(bot) = bot else { return };
-                match api::add_to_trade(&bot, &pair, is_short, add).await {
+                match api::add_to_trade(&bot, &pair, is_short, add, market).await {
                     Ok(_) => on_done.call(()),
                     Err(e) => {
                         error.set(Some(e.message));
@@ -429,6 +455,21 @@ fn AddDialog(
                     }
                 }
 
+                div { class: "choices",
+                    button {
+                        class: if market() { "choice choice--on" } else { "choice" },
+                        disabled: busy(),
+                        onclick: move |_| market.set(true),
+                        "Market"
+                    }
+                    button {
+                        class: if market() { "choice" } else { "choice choice--on" },
+                        disabled: busy(),
+                        onclick: move |_| market.set(false),
+                        "Limit"
+                    }
+                }
+
                 div { class: "exit-preview",
                     div { class: "exit-preview__row",
                         span { class: "muted", "Current stake" }
@@ -451,7 +492,12 @@ fn AddDialog(
                 }
 
                 div { class: "modal__body",
-                    "A limit entry order will be placed at the bot's entry price. "
+                    if market() {
+                        "A market order fills right away at the current price. "
+                    } else {
+                        "A limit order goes in at the bot's entry price and waits until the "
+                        "price reaches it; the trade shows Order pending until then. "
+                    }
                     "Presets add a multiple of the current stake; 2× triples the position."
                 }
 
@@ -470,7 +516,13 @@ fn AddDialog(
                         class: "btn btn--row",
                         disabled: busy() || !allowed || parsed.is_none(),
                         onclick: confirm,
-                        if busy() { span { class: "spinner" } "Placing…" } else { "Add to trade" }
+                        if busy() {
+                            span { class: "spinner" } "Placing…"
+                        } else if market() {
+                            "Add at market"
+                        } else {
+                            "Place limit order"
+                        }
                     }
                 }
             }

@@ -161,6 +161,14 @@ pub struct Trade {
     pub leverage: Option<f64>,
     pub stop_loss_abs: Option<f64>,
     pub trading_mode: Option<String>,
+    /// An order on this trade has not filled yet — typically a limit DCA or
+    /// exit waiting for the price. Freqtrade refuses another adjustment until
+    /// it fills or is cancelled.
+    #[serde(deserialize_with = "null_to_default")]
+    pub has_open_orders: bool,
+    /// Filled entries, so 2 or more means the trade has been added to.
+    #[serde(default, deserialize_with = "de_i64_opt")]
+    pub nr_of_successful_entries: Option<i64>,
 }
 
 impl Trade {
@@ -569,12 +577,14 @@ pub struct ForceEnterRequest {
 }
 
 impl ForceEnterRequest {
-    /// A limit entry at Freqtrade's configured entry price.
-    pub fn limit(pair: &str, is_short: bool, stake_amount: f64) -> Self {
+    /// A market entry fills now; a limit entry goes in at Freqtrade's
+    /// configured entry price and can wait — for a short with
+    /// `price_side: same` that is the ask, above the current price.
+    pub fn new(pair: &str, is_short: bool, stake_amount: f64, market: bool) -> Self {
         Self {
             pair: pair.to_owned(),
             side: if is_short { "short" } else { "long" }.to_owned(),
-            ordertype: "limit".to_owned(),
+            ordertype: if market { "market" } else { "limit" }.to_owned(),
             stakeamount: stake_amount,
         }
     }

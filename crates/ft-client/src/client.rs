@@ -449,11 +449,29 @@ impl FreqtradeClient {
         pair: &str,
         is_short: bool,
         stake_amount: f64,
+        market: bool,
     ) -> Result<()> {
-        let body = ForceEnterRequest::limit(pair, is_short, stake_amount);
+        let body = ForceEnterRequest::new(pair, is_short, stake_amount, market);
         self.send::<serde_json::Value, _>(Method::POST, "/forceenter", &[], Some(&body))
             .await
             .map(|_| ())
+    }
+
+    /// `DELETE /trades/{id}/open-order` — cancels the trade's unfilled order,
+    /// such as a limit DCA still waiting for its price. The trade itself stays
+    /// open with whatever had already filled.
+    ///
+    /// Freqtrade replies with the trade; as with `add_to_trade` the caller
+    /// refetches instead.
+    pub async fn cancel_open_order(&self, trade_id: i64) -> Result<()> {
+        self.send::<serde_json::Value, ()>(
+            Method::DELETE,
+            &format!("/trades/{trade_id}/open-order"),
+            &[],
+            None,
+        )
+        .await
+        .map(|_| ())
     }
 }
 

@@ -255,6 +255,9 @@ pub struct AddToTradeBody {
     pub is_short: bool,
     /// In stake currency.
     pub stake_amount: f64,
+    /// Market fills now; limit waits for Freqtrade's entry price.
+    #[serde(default)]
+    pub market: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

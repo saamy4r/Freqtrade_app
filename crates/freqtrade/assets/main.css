@@ -305,6 +305,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .chip--long { background: var(--profit-bg); color: var(--profit); }
 .chip--short { background: var(--loss-bg); color: var(--loss); }
+.chip--pending { background: var(--warn-bg); color: var(--warn); }
 
 .trade__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .trade__cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

@@ -723,15 +723,43 @@ pub async fn add_to_trade(
 
     let client = state.client(&bot_id).await?;
     client
-        .add_to_trade(&body.pair, body.is_short, body.stake_amount)
+        .add_to_trade(&body.pair, body.is_short, body.stake_amount, body.market)
         .await?;
-    tracing::info!(bot_id, pair = body.pair, stake = body.stake_amount, "add to trade requested");
+    tracing::info!(
+        bot_id,
+        pair = body.pair,
+        stake = body.stake_amount,
+        market = body.market,
+        "add to trade requested"
+    );
 
     // The trade's stake and average entry just changed.
     state.store().clear_snapshot(&bot_id, kind::OPEN_MARK)?;
 
     Ok(Json(ActionResult {
         message: "entry order placed".to_owned(),
+    }))
+}
+
+/// `DELETE /api/bots/:id/trades/:trade_id/open-order`
+///
+/// Cancels a trade's unfilled order, e.g. a limit DCA that never reached its
+/// price. Whatever already filled stays in the trade.
+pub async fn cancel_open_order(
+    State(state): State<AppState>,
+    Path((bot_id, trade_id)): Path<(String, i64)>,
+) -> ApiResult<Json<ActionResult>> {
+    // Same reasoning as `force_exit`.
+    fetch::revalidate(&state, &bot_id, true).await;
+
+    let client = state.client(&bot_id).await?;
+    client.cancel_open_order(trade_id).await?;
+    tracing::info!(bot_id, trade_id, "open order cancel requested");
+
+    state.store().clear_snapshot(&bot_id, kind::OPEN_MARK)?;
+
+    Ok(Json(ActionResult {
+        message: "order cancelled".to_owned(),
     }))
 }
 
